@@ -1,0 +1,23 @@
+.nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.nav a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: white; text-decoration: none; font-weight: 600; font-size: 13px; }
+.desk { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.rail { position: sticky; top: 20px; }
+.section { scroll-margin-top: 24px; margin: 24px 0; }
+.section h2 { font-size: 21px; margin-bottom: 6px; }
+.help { max-width: 68ch; color: var(--muted); font-size: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.toolbar input { flex: 1; min-width: 180px; }
+.item { border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: white; padding: 20px; margin: 12px 0; }
+.urgent { border-left-color: var(--bad); }
+.warning { border-left-color: var(--warn); }
+.item h3 { font-size: 16px; margin: 12px 0; line-height: 1.6; overflow-wrap: anywhere; }
+.quote { margin: 12px 0; padding: 12px 16px; background: var(--surface-2); border-left: 2px solid var(--line-strong); font-size: 14px; overflow-wrap: anywhere; }
+.fold { margin-top: 12px; }
+.fold summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 8px 0; }
+.form { display: grid; gap: 12px; margin-top: 12px; }
+.document { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.document:last-child { border-bottom: 0; }
+.document b { overflow-wrap: anywhere; }
+.action { width: 100%; }
+.rail li { margin: 8px 0; }
+@media (max-width: 1000px) { .desk { grid-template-columns: 1fr; } .rail { position: static; } }
