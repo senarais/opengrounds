@@ -2,15 +2,11 @@ import type { ReactNode } from "react";
 
 export type Tone = "ok" | "warn" | "bad" | "info" | "accent" | "neutral";
 
-export function Logo({ name, sub, href = "/" }: { name: string; sub?: string; href?: string }) {
+export function Logo({ name, sub, href = "/", src = "/og-logo.png" }: { name: string; sub?: string; href?: string; src?: string }) {
   return (
     <a className="logo" href={href} aria-label={name}>
-      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden>
-        <rect width="34" height="34" rx="10" fill="#0F172A" />
-        <path d="M5 24h24" stroke="#334155" strokeWidth="1.6" />
-        <path d="M7 24a10 10 0 0 1 20 0" fill="#FF7A00" />
-        <path d="M17 8v3M8.6 11.6l2 2M25.4 11.6l-2 2" stroke="#FFD166" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} width={30} height={34} alt="" />
       <span>
         <b>{name}</b>
         {sub && <small>{sub}</small>}

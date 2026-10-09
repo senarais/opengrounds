@@ -12,7 +12,7 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const display = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-display", weight: ["600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "Venue RWA · Bagi hasil omzet venue olahraga",
+  title: "OpenGrounds · Bagi hasil omzet venue olahraga",
   description: "Investor kecil ikut membiayai venue olahraga dan menerima bagian dari omzet yang dibuktikan data payment gateway. Demo testnet, bukan produk disetujui OJK.",
 };
 
@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <header className="topbar">
           <div className="in">
-            <Logo name="Venue RWA" sub="Bagi hasil omzet venue" />
+            <Logo name="OpenGrounds" sub="Bagi hasil omzet venue" />
             <nav className="topnav" aria-label="Navigasi utama">
               <NavLink href="/offering">Penawaran</NavLink>
               {(!me || me.role === "investor") && <NavLink href="/portfolio">Portofolio</NavLink>}
@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </header>
         <PrivyShell appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} investor={me?.role === "investor"} authId={me?.authId} linked={!!me?.wallet} chainId={chain.id}>{children}</PrivyShell>
         <footer className="footer">
-          Venue RWA · proyek hackathon ETHJKT 2026 (track RWA) · Testnet Sepolia, tanpa uang riil dan tanpa penawaran publik.
+          OpenGrounds · proyek hackathon ETHJKT 2026 (track RWA) · Testnet Sepolia, tanpa uang riil dan tanpa penawaran publik.
           Tidak mengklaim disetujui OJK. Bukan nasihat hukum atau investasi. <a href="/kebijakan-data" style={{ textDecoration: "underline" }}>Kebijakan data</a>
         </footer>
       </body>

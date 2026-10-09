@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Logo name="PoS" sub={s.company.name} />
+        <Logo name="OpenGrounds PoS" sub={s.company.name} />
         <nav aria-label="Navigasi utama">
           <NavLink href="/" exact><IconHome /><span>Dashboard</span></NavLink>
           <NavLink href="/schedule"><IconCal /><span>Jadwal &amp; booking</span></NavLink>

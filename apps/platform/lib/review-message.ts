@@ -2,4 +2,4 @@
 export interface ReviewVoteInput { seriesId: string; email: string; role: string; decision: "approved" | "rejected"; note: string; at: string }
 
 export const reviewMessage = (v: ReviewVoteInput) =>
-  `Suara review Venue RWA\nSeri: ${v.seriesId}\nPeran: ${v.role}\nAkun: ${v.email}\nPutusan: ${v.decision === "approved" ? "SETUJU" : "TOLAK"}\nCatatan: ${v.note.trim() || "-"}\nWaktu: ${v.at}`;
+  `Suara review OpenGrounds\nSeri: ${v.seriesId}\nPeran: ${v.role}\nAkun: ${v.email}\nPutusan: ${v.decision === "approved" ? "SETUJU" : "TOLAK"}\nCatatan: ${v.note.trim() || "-"}\nWaktu: ${v.at}`;

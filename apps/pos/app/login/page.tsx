@@ -8,7 +8,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ marginBottom: 28 }}><Logo name="PoS" sub="Point of Sale untuk venue olahraga" /></div>
+        <div style={{ marginBottom: 28 }}><Logo name="OpenGrounds PoS" sub="Point of Sale untuk venue olahraga" /></div>
         <div className="card">
           <h1 style={{ fontSize: 24, marginBottom: 6 }}>Masuk</h1>
           <p className="muted small" style={{ marginBottom: 18 }}>Gunakan akun admin perusahaan Anda.</p>
