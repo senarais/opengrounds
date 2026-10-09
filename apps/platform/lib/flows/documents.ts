@@ -12,7 +12,8 @@ const ANALYZABLE: DocKind[] = ["lease", "bank_statement", "loan", "tax", "licens
 
 /** Teks per halaman dari PDF. PDF tanpa lapisan teks (hasil pindai) di-OCR; lapisan teks tetap dipakai bila ada. */
 export async function pdfPages(buf: Uint8Array): Promise<string[]> {
-  const pdf = await getDocumentProxy(buf);
+  // pdf.js mencopot (detach) buffer yang diberikan; kirim salinan supaya `buf` masih utuh untuk OCR bila PDF tidak punya lapisan teks
+  const pdf = await getDocumentProxy(buf.slice());
   const { text } = await extractText(pdf, { mergePages: false });
   const pages = Array.isArray(text) ? text : [text];
   if (pages.some((p) => p.replace(/\s/g, "").length > 40)) return pages;
