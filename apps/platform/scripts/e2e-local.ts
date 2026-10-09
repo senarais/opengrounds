@@ -314,7 +314,9 @@ async function main() {
     await inv.purchase(ctx, investors[2]!.address, 3000);
     info = await chainMod.readSeries(ctx.ref!);
     ok(info.minted === info.cap && info.raised === info.target, `terjual habis: Rp${Number(info.raised).toLocaleString("id-ID")} (cap ${info.cap})`);
-    await series.closeOffering(ctx);
+    const closedMsg = await series.closeIfSoldOut(ctx.series.id);
+    ok(!!closedMsg && /Funded/.test(closedMsg), `terjual habis: penawaran tertutup otomatis (${String(closedMsg).slice(0, 60)}…)`);
+    ok((await series.closeIfSoldOut(ctx.series.id)) === null, "penutupan otomatis aman dipanggil ulang (tidak menutup dua kali)");
     info = await chainMod.readSeries(ctx.ref!);
     ok(info.state === "Funded" && info.S === info.cap, "Cara 1: minimum tercapai → Funded, suplai terkunci");
     await expectErr(inv.purchase(ctx, investors[0]!.address, 1), "tidak sedang dibuka", "beli setelah penawaran ditutup");
@@ -513,7 +515,8 @@ async function main() {
       ok((pu ?? []).every((x) => x.refunded_at && x.refund_tx), "refund tercatat di database");
       const { data: cl2 } = await pf.from("custody_ledger").select("account, amount").eq("series_id", r2.seriesId);
       const sum2 = (a: string) => (cl2 ?? []).filter((c) => c.account === a).reduce((x, c) => x + Number(c.amount), 0);
-      ok(sum2("refund") === small * price && sum2("escrow") === 0, `kustodian: escrow kembali nol, refund Rp${(small * price).toLocaleString("id-ID")}`);
+      const refunded = (small + 5) * price; // `small` token simulasi + 5 token dari uji pembelian lewat gateway (PSP palsu) di seri yang sama
+      ok(sum2("refund") === refunded && sum2("escrow") === 0, `kustodian: escrow kembali nol, refund Rp${refunded.toLocaleString("id-ID")} (termasuk pembelian lewat gateway)`);
       await expectErr(series.refundHolder(c2, investors[0]!.address), "Tidak ada token", "refund dua kali");
     }
   } finally {

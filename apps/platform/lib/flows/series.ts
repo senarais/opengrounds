@@ -8,7 +8,7 @@ import { eligibleBetween } from "@venue-rwa/connectors";
 import { reconcile } from "@venue-rwa/verification";
 import { ADDR, chain, publicClient, readSeries, rpcUrl, seriesAbi, tokenAbi } from "../chain";
 import { posDb } from "../db";
-import { audit, chainRef, needCompany, refOf, type Ctx } from "../flow";
+import { audit, chainRef, getCtx, needCompany, refOf, type Ctx } from "../flow";
 import { operatorSend } from "../operator";
 import { onchainSigners } from "../signers";
 
@@ -75,13 +75,32 @@ export async function closeOffering(ctx: Ctx) {
   const tx = await send(ctx, "closeOffering");
   const s = await readSeries(chainRef(ctx));
   await ctx.pf.from("series").update({ status: s.state }).eq("id", ctx.series.id);
+  let posted = "";
   if (s.state === "Funded") {
-    // penanda awal periode pembukuan (tanggal efektif = penutupan penawaran)
-    const { error } = await ctx.pf.from("pool_periods").upsert({ series_id: ctx.series.id, period_id: 0, final_amount: 0, pending_amount: 0, period_end: new Date().toISOString() });
-    if (error) throw new Error(`${error.message} (sudah menjalankan db/migrations/0005_periods.sql?)`);
+    // penanda awal periode pembukuan = saat penawaran DIBUKA (offeringEnd − offeringDuration): omzet selama penawaran ikut menjadi hak
+    // kantong investor begitu terdanai, dibagi rata ke suplai final. Bila penawaran gagal, tidak ada yang diposting (refund tetap penuh).
+    const ref = chainRef(ctx);
+    const [end, dur] = await Promise.all([
+      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "offeringEnd" }) as Promise<bigint>,
+      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "offeringDuration" }) as Promise<number | bigint>,
+    ]);
+    const openedAt = new Date((Number(end) - Number(dur)) * 1000);
+    const { error } = await ctx.pf.from("pool_periods").upsert({ series_id: ctx.series.id, period_id: 0, final_amount: 0, pending_amount: 0, period_end: openedAt.toISOString() });
+    if (error) throw new Error(error.message);
+    // salurkan langsung omzet yang sudah terkumpul sejak penawaran dibuka
+    try { posted = ` ${await finalizePeriod(await getCtx(ctx.series.id))}`; }
+    catch (e: any) { if (!/Belum ada akrual/.test(String(e?.message))) posted = ` Omzet belum tersalurkan: ${e?.shortMessage ?? e?.message ?? e}.`; }
   }
   await audit("platform", "series.close", { tx, result: s.state });
-  return s.state === "Funded" ? "Penawaran ditutup: Funded. Suplai terkunci; omzet setelah saat ini milik kantong investor." : `Penawaran ditutup: ${s.state}. Investor dapat refund penuh.`;
+  return s.state === "Funded" ? `Penawaran ditutup: Funded. Suplai terkunci; omzet sejak penawaran dibuka menjadi hak kantong investor.${posted}` : `Penawaran ditutup: ${s.state}. Investor dapat refund penuh.`;
+}
+
+/** Tutup otomatis begitu semua token terjual: suplai sudah final, jadi tidak perlu menunggu batas waktu. */
+export async function closeIfSoldOut(seriesId: string) {
+  const ctx = await getCtx(seriesId);
+  const s = await readSeries(chainRef(ctx));
+  if (s.state !== "Offering" || BigInt(s.minted) < BigInt(s.cap)) return null;
+  return closeOffering(ctx);
 }
 
 export async function releaseTranche(ctx: Ctx, n: 1 | 2) {

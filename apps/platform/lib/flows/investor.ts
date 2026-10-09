@@ -31,9 +31,11 @@ export async function allowOnchain(ctx: Ctx, wallet: Address) {
 export async function purchase(ctx: Ctx, wallet: Address, units: number, who = wallet.slice(0, 8)) {
   const ref = chainRef(ctx);
   if (ctx.series.status === "Superseded") throw new Error("Seri ini sudah digantikan seri baru; beli di penawaran terbaru");
-  const s = await readSeries(ref);
+  let s = await readSeries(ref);
+  // node RPC bisa tertinggal beberapa detik setelah attestation/pembukaan: baca ulang sekali sebelum menolak
+  if (s.state === "Offering" && !s.attValid) { await new Promise((r) => setTimeout(r, 2500)); s = await readSeries(ref); }
   if (s.state !== "Offering") throw new Error(`Penawaran tidak sedang dibuka (status ${s.state})`);
-  if (!s.attValid) throw new Error("Attestation tidak valid: pembelian ditolak");
+  if (!s.attValid) throw new Error("Attestation tidak valid: pembelian ditolak (bila baru saja dibuka, tunggu beberapa detik lalu coba lagi)");
   if (!Number.isInteger(units) || units < 1) throw new Error("Jumlah token minimal 1");
   if (BigInt(units) + s.minted > s.cap) throw new Error(`Melebihi cap: sisa ${(s.cap - s.minted).toString()} token`);
   await allowOnchain(ctx, wallet);
@@ -50,7 +52,8 @@ export async function purchase(ctx: Ctx, wallet: Address, units: number, who = w
 
 export async function buy(ctx: Ctx, wallet: Address, units: number) {
   const r = await purchase(ctx, wallet, units);
-  return `Pembelian ${units} token berhasil (${rp(r.amount)}, rupiah simulasi → escrow → token di-mint ke wallet Anda).`;
+  const closed = await (await import("./series")).closeIfSoldOut(ctx.series.id).catch(() => null);
+  return `Pembelian ${units} token berhasil (${rp(r.amount)}, rupiah simulasi → escrow → token di-mint ke wallet Anda).${closed ? ` Semua token terjual: ${closed}` : ""}`;
 }
 
 /** Permintaan redeem yang sudah DITANDATANGANI holder (EIP-712, tanpa gas); kontrak memverifikasi tanda tangan dan nonce. */

@@ -25,9 +25,11 @@ async function reservedUnits(ctx: Ctx): Promise<bigint> {
 export async function startPurchase(ctx: Ctx, wallet: Address, units: number, returnBase: string, psp: PspClient = xenditClient()) {
   const ref = chainRef(ctx);
   if (ctx.series.status === "Superseded") throw new Error("Seri ini sudah digantikan seri baru; beli di penawaran terbaru");
-  const s = await readSeries(ref);
+  let s = await readSeries(ref);
+  // node RPC bisa tertinggal beberapa detik setelah attestation/pembukaan: baca ulang sekali sebelum menolak
+  if (s.state === "Offering" && !s.attValid) { await new Promise((r) => setTimeout(r, 2500)); s = await readSeries(ref); }
   if (s.state !== "Offering") throw new Error(`Penawaran tidak sedang dibuka (status ${s.state})`);
-  if (!s.attValid) throw new Error("Attestation tidak valid: pembelian ditolak");
+  if (!s.attValid) throw new Error("Attestation tidak valid: pembelian ditolak (bila baru saja dibuka, tunggu beberapa detik lalu coba lagi)");
   if (!Number.isInteger(units) || units < 1) throw new Error("Jumlah token minimal 1");
   const reserved = await reservedUnits(ctx);
   if (BigInt(units) + BigInt(s.minted) + reserved > BigInt(s.cap)) throw new Error(`Melebihi cap: sisa ${(BigInt(s.cap) - BigInt(s.minted) - reserved).toString()} token (termasuk pesanan lain yang menunggu pembayaran)`);
@@ -88,6 +90,8 @@ export async function settlePurchase(id: string, psp: PspClient = xenditClient()
     const { data: dup } = await pf.from("custody_ledger").select("id").eq("series_id", p.series_id).eq("ref", ref).limit(1);
     if (!dup?.length) await pf.from("custody_ledger").insert({ series_id: p.series_id, account: "escrow", amount: p.amount, ref, simulated: true });
     await audit("platform", "purchase", { series: p.series_id, wallet: p.wallet, units: p.units, amount: p.amount, tx, invoice: p.psp_ref });
+    // token terakhir terjual: tutup penawaran dan salurkan omzet sejak dibuka (tidak menggagalkan pembelian bila gagal)
+    await (await import("./series")).closeIfSoldOut(p.series_id).catch(() => null);
     return "minted";
   } catch (e: any) {
     await pf.from("purchases").update({ status: "mint_failed", status_at: new Date().toISOString(), note: String(e?.shortMessage ?? e?.message ?? e).slice(0, 400) }).eq("id", id);

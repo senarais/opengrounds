@@ -94,25 +94,6 @@ export async function createBooking(db: AppClient, companyId: string, input: { p
 }
 
 /**
- * Catat pembayaran di LUAR jalur terverifikasi (tunai atau QRIS statis milik sendiri). Booking langsung paid dan tercatat jujur di ledger
- * (penjualan + pajak), tetapi tanpa settlement PSP sehingga TIDAK dihitung sebagai omzet terverifikasi dan menurunkan rasio cakupan.
- */
-export async function createOffRailBooking(db: AppClient, companyId: string, input: { productId: string; date: string; sessionIndex: number; customerLabel: string; method: "cash" | "qris_sendiri"; createdBy?: string }) {
-  if (input.method !== "cash" && input.method !== "qris_sendiri") throw new Error("Metode tidak valid");
-  const { product, session, start, end, amount } = await prepare(db, companyId, input);
-  const label = input.customerLabel.trim().slice(0, 40) || "Pelanggan";
-  const id = `bk_${randomBytes(4).toString("hex")}`;
-  const { error } = await db.from("bookings").insert({
-    id, company_id: companyId, product_id: product.id, slot_start: start.toISOString(), slot_end: end.toISOString(), status: "paid", payment_method: input.method,
-    customer_ref: customerRef(`${label}:${randomUUID()}`, SALT), customer_label: label, amount, created_by: input.createdBy ?? null,
-  });
-  if (error) throw new Error(error.code === "23505" ? "Sesi itu sudah dipesan" : error.message);
-  const now = new Date().toISOString();
-  await appendEntries(db, companyId, [{ type: "sale", amount, bookingId: id, createdAt: now }, { type: "tax", amount: Math.round(amount / 11), bookingId: id, createdAt: now }]);
-  return { bookingId: id, amount, sessionIndex: session.index };
-}
-
-/**
  * Settlement dari PSP (webhook atau halaman bayar simulasi). Idempoten: dipanggil dua kali tidak menggandakan ledger.
  * `ref` = pay_token atau psp_ref.
  */
@@ -142,7 +123,20 @@ export async function settlePayment(db: AppClient, ref: { payToken?: string; psp
     { type: "tax", amount: tax, bookingId: booking.id, createdAt: now },
     { type: "fee", amount: fee, bookingId: booking.id, createdAt: now },
   ]);
+  notifyPlatform(pay.company_id);
   return { already: false as const, amount, fee, tax, bookingId: booking.id as string };
+}
+
+/**
+ * Beri tahu platform bahwa ada pembayaran yang settle, supaya bagian investor langsung diposting ke kantong (bila penawaran terdanai).
+ * Tidak ditunggu dan tidak pernah menggagalkan pelunasan: platform tidak terjangkau = diposting pada pembayaran berikutnya.
+ */
+function notifyPlatform(companyId: string) {
+  const url = process.env.PLATFORM_URL, token = process.env.INTERNAL_API_TOKEN;
+  if (!url || !token) return;
+  void fetch(`${url.replace(/\/$/, "")}/api/pool/settled`, {
+    method: "POST", headers: { "content-type": "application/json", "x-internal-token": token }, body: JSON.stringify({ companyId }), signal: AbortSignal.timeout(10_000),
+  }).catch(() => { /* platform mati / jaringan: abaikan */ });
 }
 
 /**

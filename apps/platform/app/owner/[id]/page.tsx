@@ -11,7 +11,7 @@ import { readSeries } from "@/lib/chain";
 import { ownerAvailable } from "@/lib/flows/series";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { currentSeriesOf } from "@/lib/flows/reprice";
-import { reprice, withdraw } from "./actions";
+import { withdraw } from "./actions";
 
 export const dynamic = "force-dynamic";
 const POS_URL = process.env.POS_URL ?? "http://localhost:3001";
@@ -128,18 +128,11 @@ export default async function ApplicationDetail({ params, searchParams }: { para
           )}
         </Card>
       </div>
-      {["Verifying", "Attested", "Offering"].includes(series.status) && !(info && info.minted > 0n) && (
-        <Card title="Ubah harga atau target" subtitle="Harga dikunci di kontrak, jadi perubahan membuat seri pengganti: diverifikasi ulang dan perlu attestation baru dari penandatangan. Menaikkan harga menambah masa tunggu 24 jam. Tidak bisa setelah ada token terjual.">
-          <form action={reprice} className="grid c3">
-            <input type="hidden" name="id" value={id} />
-            <label className="field">Harga per token (Rp)<input className="input" name="unitPrice" inputMode="numeric" defaultValue={Number(series.unit_price)} required /></label>
-            <label className="field">Target (Rp)<input className="input" name="target" inputMode="numeric" defaultValue={Number(series.target)} required /></label>
-            <label className="field">Minimum raise (Rp)<input className="input" name="minRaise" inputMode="numeric" defaultValue={Number(series.min_raise)} required /></label>
-            <div><button className="btn">Ajukan perubahan</button></div>
-          </form>
-          {series.supersedes && <p className="small muted" style={{ marginTop: 10 }}>{series.price_note}{series.open_after && new Date(series.open_after) > new Date() ? ` · penawaran baru bisa dibuka setelah ${dt(series.open_after)}` : ""}</p>}
-        </Card>
-      )}
+      <div className="mt">
+        <Notice tone="info" title="Syarat penawaran terkunci.">
+          {Number(series.target / series.unit_price).toLocaleString("id-ID")} token × {rp(Number(series.unit_price))}, {(series.share_bps / 100).toLocaleString("id-ID")}% omzet selama {Math.round(series.tenor_days / 30)} bulan, minimum {rp(Number(series.min_raise))}. Angka ini dikunci sejak pengajuan dikirim dan tercatat di kontrak; tidak bisa diubah dan tidak ada penambahan token.
+        </Notice>
+      </div>
       <p className="small muted mt">Diajukan {dt(venue.created_at)}.</p>
     </div>
   );

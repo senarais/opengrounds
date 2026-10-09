@@ -332,6 +332,7 @@ export function ApplyForm() {
             <div><b>Anda mengumpulkan {fmt(t)}</b> dari {n} token × {fmt(price)}.</div>
             {sh > 0 && <div>Total <b>{sh}% omzet</b> dibagi rata: <b>satu token = {(sh / n).toLocaleString("id-ID", { maximumFractionDigits: 3 })}% omzet</b> selama tenor.</div>}
             <div className="small muted" style={{ marginTop: 4 }}>Minimum: {mt >= 1 && mt <= n ? <>{mt} token ({fmt(mt * price)}). Jika yang terjual kurang dari itu saat penawaran ditutup, penawaran gagal dan semua investor di-refund penuh; Anda tidak menerima dana.</> : <span style={{ color: "var(--bad)" }}>harus 1 sampai {n}</span>}</div>
+            <div className="notice warn" style={{ marginTop: 10, fontSize: 13 }}><div><b>Tidak bisa diubah setelah dikirim.</b> Jumlah token, harga per token, persen omzet, tenor, dan minimum dikunci di kontrak saat pengajuan dikirim. Tidak ada penambahan token dan tidak ada perubahan harga; pastikan angkanya sudah benar.</div></div>
           </>) : <span className="small muted">Isi persen, jumlah token, dan harga satu token; total dana dan persen per token dihitung otomatis di sini.</span>}
         </div></div>
         <label className="field">Tujuan dana (pengungkapan, tidak dienforce)<input className="input" name="useOfFunds" maxLength={300} placeholder="mis. renovasi lapangan dan atap" /></label>
