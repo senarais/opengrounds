@@ -1,3 +1,3 @@
 # connectors
 
-Belum diimplementasi. Lihat `docs/PLAN.md` untuk urutan kerja dan `CLAUDE.md` untuk aturan keras.
+Interface `BookingSource`, implementasi PoS (Supabase), laporan dan Merkle root harian. Setup dan aturan: `README.md` dan `CLAUDE.md` di root.

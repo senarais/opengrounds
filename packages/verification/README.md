@@ -1,3 +1,3 @@
 # verification
 
-Belum diimplementasi. Lihat `docs/PLAN.md` untuk urutan kerja dan `CLAUDE.md` untuk aturan keras.
+Rekonsiliasi, policy engine dan skor, redaksi, ekstraksi dokumen lewat gateway LLM. Setup dan aturan: `README.md` dan `CLAUDE.md` di root.

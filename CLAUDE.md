@@ -1,8 +1,10 @@
 # venue-rwa: konteks untuk Claude Code
 
+Nama produk: **OpenGrounds** (logo `OG.png`, dipasang di `apps/*/public/og-logo.png` dan `apps/*/app/icon.png`). Nama paket/folder tetap `venue-rwa`.
+
 Platform RWA yang men-tokenisasi hak atas bagian **omzet (Eligible Revenue)** venue olahraga, plus **PoS (POS/booking)** sebagai sumber data referensi. ETHJKT 2026, track RWA, chain **Sepolia**. Satu monorepo, satu submission.
 
-Detail lengkap: `docs/PRD.md`. Urutan kerja: `docs/PLAN.md`. Setup: `docs/SETUP.md`. Keputusan terbuka: `docs/OPEN-DECISIONS.md`.
+Setup ada di `README.md`. Folder `docs/` (PRD, PLAN, OPEN-DECISIONS, XENDIT, CONTRACTS, contoh-data) hanya lokal, tidak ikut git; baca bila ada di mesin ini.
 
 ## Struktur
 
@@ -26,7 +28,7 @@ Detail lengkap: `docs/PRD.md`. Urutan kerja: `docs/PLAN.md`. Setup: `docs/SETUP.
 - Akuntansi kantong memakai variabel internal (P, R, S), **bukan `balanceOf`**.
 - AI tidak menandatangani apa pun; keputusan lewat policy engine deterministik + manusia. Urutan: review manusia yang butuh DUA suara setuju (satu operator DAN satu auditor; satu penolakan = ditolak) → deploy kontrak → attestation 2 tanda tangan yang WAJIB memuat penandatangan independen (signers[2], auditor luar; dua anggota tim saja ditolak kontrak) → buka penawaran. Veto (cabut/FAIL) cukup 1 penandatangan mana pun. Staf baru diundang lewat tautan sekali pakai; operator tidak pernah mengetahui kata sandi staf lain.
 - Tidak ada kode dari proyek Arbitrum lama. Chain: Sepolia. PSP: Xendit lewat adapter.
-- Jangan klaim kapabilitas Xendit yang belum terverifikasi. Lihat `docs/XENDIT.md`: Invoice/QRIS/VA/e-wallet terverifikasi di test mode; split rules dan sub-akun (xenPlatform) TIDAK tersedia di akun ini.
+- Jangan klaim kapabilitas Xendit yang belum terverifikasi. Lihat `docs/XENDIT.md` bila ada (lokal): Invoice/QRIS/VA/e-wallet terverifikasi di test mode; split rules dan sub-akun (xenPlatform) TIDAK tersedia di akun ini.
 
 ## Aturan tambahan
 
@@ -34,7 +36,7 @@ Detail lengkap: `docs/PRD.md`. Urutan kerja: `docs/PLAN.md`. Setup: `docs/SETUP.
 - Settlement hanya dari webhook PSP / halaman bayar simulasi, bukan klik kasir.
 - Token ERC-20 OpenZeppelin v5, `decimals = 0`; `transfer` ERC-20 langsung selalu dikunci. Token hanya bergerak lewat Series: mint/burn, dan `transferFor` (EIP-712 dari pengirim, diteruskan operator) antar dua wallet allowlist/KYC, hanya saat Funded/Active, tidak boleh memindahkan token yang terkunci untuk redeem. Tidak ada listing/harga pasar; pembayaran antar pihak di luar platform.
 - Kontrak: 3 (AssetAttestation, SeriesToken, Series). Fallback: gabung SeriesToken ke Series. Tanda tangan quorum wajib terurut naik per alamat.
-- Harga penawaran tidak boleh melebihi `maxPrice` di attestation. Perubahan harga = seri pengganti (harga immutable di kontrak) + verifikasi ulang + attestation baru; hanya bila belum ada token terjual; naik = tunggu 24 jam.
+- Harga penawaran tidak boleh melebihi `maxPrice` di attestation. Syarat penawaran (jumlah token, harga, persen omzet, tenor, minimum) dikunci sejak owner mengirim pengajuan: tidak ada perubahan harga, tidak ada seri pengganti dari owner, tidak ada penambahan token.
 - Data transaksi dari sistem eksternal (impor CSV/API PoS) ditandai `source`; bila > 50% eksternal, tier data `connector` (haircut minimal 20%). Xendit split ada di kode di belakang `XENDIT_SPLIT=on` tetapi belum terverifikasi.
 - Batas bagian omzet yang boleh dijual: `MAX_SHARE_BPS` = 50% (parameter kebijakan di `packages/shared/src/application.ts`, bukan batas kontrak; kontrak hanya menolak > 100%). Total beban atas omzet (bagian ini + yang sudah dijanjikan) juga ≤ batas itu.
 - Katalog data (`packages/shared/src/dataPolicy.ts`) adalah sumber kebenaran untuk halaman `/kebijakan-data` dan catatan di form; ubah katalog bila perilaku penyimpanan/visibilitas data berubah. Data privat owner (NIB, NPWP, rekening, kontak, rincian utang) hanya di `platform.venue_private`.
@@ -71,4 +73,3 @@ Alur lengkap jalan end-to-end di Sepolia lewat web (pnpm test, forge test, `./sc
 
 - pnpm workspace, TypeScript strict, Node ≥ 22. Contracts: Foundry, Solidity ^0.8.24.
 - Nama file OpenZeppelin v5: cek persis saat install (mis. `ReentrancyGuard` ada di `utils/`).
-- User dipanggil Nuza, bahasa Indonesia santai di chat; kode, komentar, dan identifier tetap Inggris.

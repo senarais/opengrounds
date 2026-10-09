@@ -7,4 +7,4 @@ forge build
 forge test -vvv
 ```
 
-Ringkasan desain ada di `docs/CONTRACTS.md` di root monorepo.
+Invarian yang dites dan aturan kontrak ada di `CLAUDE.md` di root monorepo.
