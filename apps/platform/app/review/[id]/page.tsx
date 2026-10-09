@@ -1,3 +1,4 @@
+import { VenueMedia } from "@/components/VenueMedia";
 import { notFound } from "next/navigation";
 import { Badge, Card, Flash, KV, Notice, PageHeader } from "@venue-rwa/ui";
 import { SEVERITY_RANK, type Severity } from "@venue-rwa/verification";
@@ -61,6 +62,7 @@ export default async function ReviewCase({ params, searchParams }: { params: Pro
             {!kc.risk_summary && <Notice tone="info">Pemeriksaan belum memiliki hasil. Jalankan pembacaan dokumen melalui panel di bawah.</Notice>}
             <ReviewFindings findings={findings} caseId={id} decided={decided} sources={sources} />
           </section>
+          <VenueMedia venueId={venue.id} name={venue.name} area={venue.city} facilities={input.venue.facilities} openHour={input.venue.openHour} closeHour={input.venue.closeHour} />
           <section id="documents" className={styles.section}>
             <Card title="Dokumen pengajuan" subtitle="Buka dokumen asli untuk memastikan isi dan konteks kutipan.">
               {docs.map((d) => <div key={d.id} className={styles.document}>
@@ -112,7 +114,7 @@ export default async function ReviewCase({ params, searchParams }: { params: Pro
                 <SubmitButton className={`btn ${styles.action}`} pendingText="Memproses keputusan…" name="decision" value="NEEDS_INFO" disabled={kc.status !== "IN_REVIEW"}>Minta data tambahan</SubmitButton>
                 <SubmitButton className={`btn danger ${styles.action}`} pendingText="Memproses keputusan…" name="decision" value="REJECTED" disabled={kc.status !== "IN_REVIEW"}>Tolak pengajuan</SubmitButton>
               </form>
-              <p className="small muted" style={{ marginTop: 16 }}>Persetujuan menyiapkan seri. Token baru terbit setelah Grounds menyetujui pembelian hak dan owner menandatangani akuisisi.</p>
+              <p className="small muted" style={{ marginTop: 16 }}>Dua persetujuan review menyiapkan kontrak dan tanda tangan platform secara otomatis. Token baru terbit setelah owner mengonfirmasi pengalihan hak dan pembayaran melalui tanda tangan akuisisi.</p>
             </>}
           </Card>
         </aside>

@@ -73,9 +73,9 @@ function IsoCourt({ facilities, occupancy, onPick, picked }: { facilities: Court
  * klik lapangan untuk spesifikasi. Sumber okupansi selalu ditulis (data PoS vs ilustrasi dari angka yang dilaporkan owner).
  */
 export function CourtDiorama({ facilities, hours, openHour, closeHour, source, note, venueName, area }: {
-  facilities: CourtFacility[]; hours: number[]; openHour: number; closeHour: number; source: "pos" | "reported"; note: string; venueName: string; area: string;
+  facilities: CourtFacility[]; hours: number[]; openHour: number; closeHour: number; source: "pos" | "reported" | "illustration"; note: string; venueName: string; area: string;
 }) {
-  const peak = hours.reduce((best, v, h) => (v > (hours[best] ?? 0) ? h : best), Math.min(19, Math.max(openHour, 6)));
+  const peak = hours.reduce((best, v, h) => (v > (hours[best] ?? 0) ? h : best), source === "illustration" ? 12 : Math.min(19, Math.max(openHour, 6)));
   const [hour, setHour] = useState(Math.min(Math.max(peak, 6), 23));
   const [picked, setPicked] = useState<number | null>(null);
   const [gl, setGl] = useState<boolean | null>(null);
@@ -116,14 +116,15 @@ export function CourtDiorama({ facilities, hours, openHour, closeHour, source, n
           <div className="row" style={{ gap: 8 }}>
             <Mascot size={34} mood={open ? (occ > 0.6 ? "happy" : "think") : "think"} />
             <div>
-              <div style={{ fontWeight: 700 }}>{hh(hour)} WIB · {open ? `okupansi ±${Math.round(occ * 100)}%` : "tutup"}</div>
-              <div className="small muted">{source === "pos" ? "Data PoS" : "Ilustrasi, bukan data per jam"}</div>
+              <div style={{ fontWeight: 700 }}>{hh(hour)} WIB · {source === "illustration" ? "pratinjau pencahayaan" : open ? `okupansi ±${Math.round(occ * 100)}%` : "tutup"}</div>
+              <div className="small muted">{source === "pos" ? "Data PoS" : source === "illustration" ? "Ilustrasi 3D · okupansi belum tersedia" : "Ilustrasi, bukan data per jam"}</div>
             </div>
           </div>
           <span className="badge plain" style={{ background: lightsOn(hour) ? "var(--surface-2)" : "var(--highlight-soft)" }}>{phaseLabel(hour)}</span>
         </div>
-        <input type="range" min={6} max={23} step={1} value={hour} onChange={(e) => setHour(Number(e.target.value))} aria-label="Jam" />
-        <details className="small muted"><summary style={{ cursor: "pointer", fontWeight: 700 }}>Dari mana angka okupansi ini?</summary><div style={{ lineHeight: 1.4, marginTop: 4 }}>{note}</div></details>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }} aria-label="Pilih lapangan">{facilities.slice(0, 4).map((facility, i) => <button type="button" key={i} className="btn sm" aria-pressed={picked === i} onClick={() => setPicked(picked === i ? null : i)}>{facility.name}</button>)}</div>
+        <input type="range" min={6} max={23} step={1} value={hour} onChange={(e) => setHour(Number(e.target.value))} aria-label="Jam pencahayaan lapangan" />
+        <details className="small muted"><summary style={{ cursor: "pointer", fontWeight: 700 }}>{source === "illustration" ? "Tentang visual ini" : "Dari mana angka okupansi ini?"}</summary><div style={{ lineHeight: 1.4, marginTop: 4 }}>{note}</div></details>
       </div>
     </div>
   );

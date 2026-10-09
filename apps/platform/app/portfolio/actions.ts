@@ -13,12 +13,12 @@ const BACK = "/portfolio";
 
 export async function startKycAction() {
   const me = await requireInvestor();
-  let url = "";
   await guarded(BACK, async () => {
     const h = await headers();
-    url = await startDiditKyc(me.userId, me.wallet, `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`);
+    const url = await startDiditKyc(me.userId, me.wallet, `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`);
+    // guarded always redirects; propagate this redirect before its default return path.
+    redirect(url);
   });
-  if (url) redirect(url);
 }
 export async function mockKycAction(fd: FormData) {
   const me = await requireInvestor();

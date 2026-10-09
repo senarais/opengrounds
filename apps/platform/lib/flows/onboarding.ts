@@ -42,7 +42,7 @@ export async function submitOnboarding(userId: string, input: OnboardingInput, f
       organization_id: orgId, name: v.name, sports: v.sports, address: v.address, city: v.city, province: v.province, lat: v.lat, lng: v.lng,
       courts: v.facilities.length, open_hour: v.openHour, close_hour: v.closeHour, facilities: v.facilities, operating_since: `${v.operatingSince}-01`,
       digital_share_pct: gross > 0 ? Math.round((digital / gross) * 10_000) / 100 : 0, offered_stake_bps: input.offering.stakeBps, use_of_funds: input.offering.useOfFunds,
-      integrations: input.integrations, submitted_by: submittedBy ?? null,
+      integrations: { ...input.integrations, initialTokenPriceIdr: input.offering.tokenPrice ?? 10_000 }, submitted_by: submittedBy ?? null,
     }).select("id").single();
     if (ve) throw new Error(ve.message);
     const venueId = venue!.id as string;
@@ -110,7 +110,7 @@ export async function loadOnboarding(venueId: string): Promise<{ input: Onboardi
     },
     financials: months,
     debt: { outstanding: 0, monthlyInstallment: 0, lender: "", covenantRestricts: false, ...(org.debt ?? {}) },
-    offering: { stakeBps: venue.offered_stake_bps, useOfFunds: venue.use_of_funds ?? "" },
+    offering: { tokenPrice: venue.integrations?.initialTokenPriceIdr ?? 10_000, stakeBps: venue.offered_stake_bps, useOfFunds: venue.use_of_funds ?? "" },
     payout: { bank: bank?.bank ?? "", accountName: bank?.holder_name ?? "", accountNumber: bank?.account_masked ?? "" },
     integrations: { gatewayOnly: true, bankDataAccess: !!venue.integrations?.bankDataAccess },
     consent: { dataProcessing: true, truthful: true },

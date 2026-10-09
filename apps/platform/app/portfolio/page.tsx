@@ -105,6 +105,16 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
         </Card>
       ))}
 
+      <Card title="Bagaimana laba menjadi saldo Anda?" className="mt">
+        <ol className="small" style={{ paddingLeft: 20, lineHeight: 1.8 }}>
+          <li>Pelanggan membayar booking lewat gateway. Penjualan PoS belum langsung menjadi saldo investor.</li>
+          <li>Di akhir periode, pendapatan dikurangi refund, biaya, pajak, dan cadangan. Platform dan owner menyetujui laporan laba.</li>
+          <li>Setelah dana distribusi tersedia, jatah berdasarkan token Anda dikreditkan ke saldo. Token treasury juga mendapat bagiannya, jadi seluruh pool bukan milik investor yang sudah membeli.</li>
+          <li><b>Tarik:</b> kirim saldo ke rekening terverifikasi, minimal Rp10.000. <b>Reinvest:</b> buka produk, pilih “Reinvest dari saldo”, lalu tanda tangani pembelian token baru. Lot baru punya masa kunci.</li>
+        </ol>
+        <p className="small muted">Harga referensi token dan saldo laba adalah dua hal berbeda. Laba tidak otomatis menaikkan harga token. Demo ini memakai rupiah simulasi.</p>
+        <Link href="/products" className="btn sm">Pilih produk untuk reinvest</Link>
+      </Card>
       <div className="grid c2 mt">
         <Card title="Tarik saldo" subtitle="Hanya ke rekening terdaftar atas nama Anda">
           {bankOk && balance >= 10_000 ? (

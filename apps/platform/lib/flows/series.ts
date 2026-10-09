@@ -33,7 +33,7 @@ export async function issueSeries(venueId: string, actor: string, assetValue: nu
   const gate = kybGate(input, docs.map((d) => d.kind), { assetValue });
   if (!gate.valuation) throw new Error("Valuasi tidak bisa dihitung");
   const val = gate.valuation;
-  const p = DEMO_PARAMS;
+  const p = { ...DEMO_PARAMS, tokenPrice: input.offering.tokenPrice ?? DEMO_PARAMS.tokenPrice };
 
   const { data: valuationRow, error: ve } = await pf.from("valuations").insert({
     venue_id: venueId, v_aset: assetValue, d12: val.d12, r_bps: p.requiredYieldBps, v_income: val.vIncome, v: val.v, y_bps: val.yieldBps, in_band: val.inBand,
@@ -72,35 +72,38 @@ export async function issueSeries(venueId: string, actor: string, assetValue: nu
   await pf.from("series").update({ status: "Verified", token_address: info.token }).eq("id", series!.id);
   await audit(actor, "series.deploy", { entity: "series", entityId: series!.id, after: { address, tx, symbol, valuation: val.v, supply: val.supply } });
 
-  // Token belum bisa terbit: Grounds (SPV) harus menyetujui pembelian hak lebih dulu (approveAcquisition), baru platform menandatangani.
+  // The SPV submission already expresses its acquisition intent; only the owner's confirmation remains.
+  await prepareAcquisition(series!.id);
   return { seriesId: series!.id as string, address };
 }
 
-/**
- * Grounds (SPV) sebagai pembeli menyetujui pembelian X% hak di valuasi V (keputusan manusia dengan identitas tercatat).
- * Setelah itu attestation ACQUISITION_CLOSED dibuat dan slot PLATFORM menandatangani atas nama Grounds via Open Grounds;
- * owner (penjual) menandatangani terakhir.
- */
-export async function approveAcquisition(seriesId: string, actor: string, note: string) {
-  const ctx = await getSeries(seriesId);
-  if (ctx.series.status !== "Verified") throw new Error(`Seri berstatus ${ctx.series.status}; persetujuan hanya untuk seri Verified`);
-  if (ctx.series.spv_approved_at) throw new Error("Pembelian sudah disetujui SPV");
-  const { error } = await platformDb().from("series").update({ spv_approved_by: actor, spv_approved_at: new Date().toISOString(), spv_note: note || null }).eq("id", seriesId).is("spv_approved_at", null);
-  if (error) throw new Error(error.message);
-  await audit(actor, "spv.approve_acquisition", { entity: "series", entityId: seriesId, after: { valuation: ctx.series.valuation_idr, stakeBps: ctx.series.stake_bps, supply: ctx.series.supply, note } });
-  await prepareAcquisition(seriesId);
-  return `Pembelian hak ${(ctx.series.stake_bps / 100).toFixed(0)}% disetujui. Platform sudah menandatangani; menunggu tanda tangan owner (penjual).`;
-}
-
-/** Attestation ACQUISITION_CLOSED: bukti = hash halaman produk + valuasi. Hanya setelah SPV menyetujui; PLATFORM langsung menandatangani. */
+/** Prepare and sign automatically after KYB approval. The SPV does not repeat its submission approval. */
 export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const s = ctx.series;
-  if (!s.spv_approved_at) throw new Error("Grounds (SPV) belum menyetujui pembelian hak ini");
+  if (s.status !== "Verified") throw new Error("Akuisisi hanya disiapkan untuk seri yang sudah diverifikasi");
+  const pf = platformDb();
+  const review = await pf.from("kyb_cases").select("status").eq("venue_id", s.venue_id).order("created_at", { ascending: false }).limit(1).single();
+  if (review.error || review.data?.status !== "APPROVED") throw new Error("Review belum disetujui; tanda tangan akuisisi belum bisa disiapkan");
   const evidenceHash = evidenceHashOf(canonicalJson({ profile: profileHash ?? ctx.venue.public_profile_hash, valuation: s.valuation_id, simulated: true }));
   const payload = { valuation: String(s.valuation_idr), supply: String(s.supply), refPrice: String(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash };
   const payloadHash = acquisitionPayload({ valuation: BigInt(s.valuation_idr), supply: BigInt(s.supply), refPrice: BigInt(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash });
+  const { data: existing, error: existingError } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("ref_id", "0").maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (existing?.status === "submitted") throw new Error("Akuisisi sudah dikirim ke chain");
+  // Keep compatibility with the existing schema; these fields now record submission intent, not an extra approval step.
+  if (!s.spv_approved_at) {
+    const submitter = ctx.venue.submitted_by ?? "legacy-submission";
+    const recordedAt = ctx.venue.created_at ?? new Date().toISOString();
+    const { error } = await pf.from("series").update({ spv_approved_by: submitter, spv_approved_at: recordedAt, spv_note: "Persetujuan aplikasi tercakup dalam pengajuan; pengalihan hak dan pembayaran tetap dikonfirmasi owner." }).eq("id", seriesId).is("spv_approved_at", null);
+    if (error) throw new Error(error.message);
+    await audit("platform", "acquisition.submission_recognized", { entity: "series", entityId: seriesId, detail: { submittedBy: submitter, submittedAt: recordedAt, simulated: true } });
+  }
+  if (existing?.status === "collecting" && existing.payload_hash === payloadHash && Date.parse(existing.deadline) > Date.now()) {
+    if (!(existing.signatures ?? []).some((sig: { slot: string }) => sig.slot === "PLATFORM")) await signAsPlatform(existing.id, addr);
+    return existing.id as string;
+  }
   const att = await createAttestation({ seriesId, kind: "ACQUISITION_CLOSED", refId: 0, payload, payloadHash, evidenceHash, deadline: new Date(Date.now() + ACQUISITION_WINDOW_DAYS * 86_400_000) });
   await signAsPlatform(att.id, addr);
   return att.id as string;

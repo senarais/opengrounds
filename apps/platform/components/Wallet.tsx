@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
+import styles from "./Wallet.module.css";
 import { useInvestorSigner } from "./signer-context";
 
 declare global { interface Window { ethereum?: any } }
@@ -124,8 +125,9 @@ export function AttestSignButton({ attId, label, via, chainId, confirmText }: { 
   const privy = usePrivySign();
   const [busy, setBusy] = useState(false);
   const [m, setM] = useState<{ text: string; err?: boolean }>({ text: "" });
+  const confirmation = useRef<HTMLDialogElement>(null);
+  const confirmationId = useId();
   async function go() {
-    if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true); setM({ text: "" });
     try {
       const res = await fetch(`/api/attest/${attId}`);
@@ -140,7 +142,17 @@ export function AttestSignButton({ attId, label, via, chainId, confirmText }: { 
   }
   return (
     <div className="stack" style={{ ["--gap" as any]: "8px" }}>
-      <button className="btn primary" disabled={busy || (via === "privy" && !privy.ready)} onClick={go}>{busy ? "Menunggu wallet…" : via === "privy" && !privy.ready ? "Menyiapkan wallet…" : label}</button>
+      <button type="button" className="btn primary" disabled={busy || (via === "privy" && !privy.ready)} onClick={() => confirmText ? confirmation.current?.showModal() : void go()}>{busy ? "Menunggu wallet…" : via === "privy" && !privy.ready ? "Menyiapkan wallet…" : label}</button>
+      {confirmText && <dialog ref={confirmation} className={styles.confirmation} aria-labelledby={`${confirmationId}-title`} aria-describedby={`${confirmationId}-description`}>
+        <p className="small muted">Open Grounds · Ethereum Sepolia</p>
+        <h2 id={`${confirmationId}-title`}>Konfirmasi sebelum tanda tangan</h2>
+        <p id={`${confirmationId}-description`}>{confirmText}</p>
+        <p className="small muted">Setelah lanjut, wallet meminta tanda tangan Anda. Platform menanggung gas transaksi.</p>
+        <div className={styles.actions}>
+          <button type="button" className="btn" autoFocus onClick={() => confirmation.current?.close()}>Batal</button>
+          <button type="button" className="btn primary" onClick={() => { confirmation.current?.close(); void go(); }}>Lanjut ke wallet</button>
+        </div>
+      </dialog>}
       <Msg m={m} />
     </div>
   );

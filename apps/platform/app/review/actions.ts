@@ -38,6 +38,6 @@ export async function decideAction(fd: FormData) {
     if (decision !== "APPROVED") return decision === "REJECTED" ? "Pengajuan ditolak." : "Owner diminta melengkapi data.";
     if (!result.finalized) return `Persetujuan Anda tersimpan (1 dari 2). Menunggu tanda tangan ${result.waitingFor}; kontrak belum dibuat.`;
     const r = await issueSeries(result.venueId, me.email, assetValue);
-    return `Dua persetujuan lengkap. Kontrak seri otomatis dibuat (${r.address.slice(0, 10)}…). Penerbitan token masih memerlukan penyelesaian akuisisi dan tanda tangan owner.`;
+    return `Dua persetujuan lengkap. Kontrak seri otomatis dibuat (${r.address.slice(0, 10)}…). Tanda tangan platform disiapkan otomatis; menunggu tanda tangan akuisisi owner.`;
   });
 }

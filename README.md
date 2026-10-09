@@ -54,7 +54,7 @@ node scripts/gen-abi.mjs   # ABI + bytecode ke apps/platform/lib/abi.ts (setelah
 
 Opsional di `.env` (kosong = jalur simulasi berlabel): `PSP_MODE=xendit` + `XENDIT_SECRET_KEY` (pembelian investor lewat Xendit mode uji), `NEXT_PUBLIC_PRIVY_APP_ID` (wajib untuk wallet investor/owner; custom auth JWT Supabase, JWKS `…/auth/v1/.well-known/jwks.json`), `LLM_*` (gateway Morphic untuk ekstraksi dokumen), `DIDIT_*` (KYC sungguhan), `INTERNAL_API_TOKEN` (PoS → platform dan HMAC webhook sandbox).
 
-**Alur demo:** owner daftar & ajukan → pemeriksaan otomatis + temuan AI → reviewer meninjau & menyetujui (kontrak seri dideploy) → Grounds (SPV) menyetujui pembelian hak → platform menandatangani → owner (penjual) menandatangani akuisisi (simulasi) → token dicetak ke treasury → investor KYC + rekening + tanda tangan pesanan + bayar → token masuk (lot terkunci 10 menit, demo mode) → booking di PoS (split s%) → operator menutup periode → owner menandatangani angka → kontrak menghitung jatah → true-up → saldo investor → tarik / reinvest / jual balik → halaman operator "platform curang ditolak" dan status Overdue.
+**Alur demo:** SPV mengajukan atas nama owner → pemeriksaan otomatis + temuan AI → operator dan reviewer menandatangani persetujuan (kontrak seri dideploy) → platform menandatangani → owner (penjual) menandatangani akuisisi (simulasi) → token dicetak ke treasury → investor KYC + rekening + tanda tangan pesanan + bayar → token masuk (lot terkunci 10 menit, demo mode) → booking di PoS (split s%) → operator menutup periode → owner menandatangani angka → kontrak menghitung jatah → true-up → saldo investor → tarik / reinvest / jual balik → halaman operator "platform curang ditolak" dan status Overdue.
 
 **Tes:** `pnpm test:contracts`, `pnpm --filter @venue-rwa/shared test`, `pnpm --filter @venue-rwa/verification test`, `pnpm --filter @venue-rwa/pos selftest`.
 
@@ -65,3 +65,12 @@ Dibuat selama periode hackathon: seluruh `packages/contracts`, `apps/platform`, 
 ## Batas yang jujur
 
 Open Grounds tidak memiliki izin regulator; rupiah dan escrow disimulasikan; 2-dari-3 hanya mendemokan mekanisme bila kunci dipegang tim yang sama; nilai aset diinput reviewer (production: penilai independen); cek AHU/OSS belum terintegrasi; xenPlatform belum aktif sehingga split memakai sandbox; catatan on-chain bukan bukti kepemilikan hukum.
+
+
+### Data demo venue dan PoS
+
+`pnpm --filter @venue-rwa/platform seed:demo -- --variant=futsal` (atau `padel`, `tenis`) menambahkan pengajuan sintetis ke owner `kopiKenangan@gmail.com`, dokumen PDF/CSV, foto referensi eksternal berlabel, workspace PoS sintetis, serta 12 pembayaran sandbox. Pemeriksaan otomatis dijalankan; persetujuan operator/reviewer/owner tetap memakai wallet masing-masing. Harga awal token Rp5.000/Rp10.000/Rp25.000; pengajuan biasa juga dapat menentukan harga awal. Harga tersimpan bersama pengaturan venue dan ikut hash review.
+
+Foto referensi dan lisensi tercatat di `apps/platform/lib/demo-photos.ts` dan ditampilkan di galeri; bukan bukti venue fiktif. Seed tidak menghubungi bank/payment gateway sungguhan. Baris pembayaran memakai `simulated=true`; ledger dibuat oleh jalur settlement PoS. Jalankan seed sekali per varian; pengajuan yang sudah ada tidak digandakan.
+
+Untuk demo Kenangan yang sudah Active, `pnpm --filter @venue-rwa/platform exec tsx --env-file=../../.env scripts/seed-active-profit.ts` mengisi pembayaran sandbox dan biaya, tanpa menghapus ledger. Tambahkan `--close` setelah settlement terakhir berusia minimal 60 detik untuk menyiapkan laporan: owner menandatangani → lunasi true-up sandbox bila diminta → saldo investor dikreditkan → investor memilih reinvest atau tarik. Tidak ada kredit laba sebelum pengesahan, dan seed tidak menandatangani sebagai investor/owner.

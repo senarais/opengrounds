@@ -2,9 +2,9 @@
 
 Produk: **Open Grounds** (platform) + **Grounds** (SPV penerbit token). Logo `OG.png` (`apps/*/public/og-logo.png`, `apps/*/app/icon.png`). Nama paket/folder tetap `venue-rwa`. ETHJKT 2026, track RWA, **Ethereum Sepolia**, testnet saja.
 
-**Sumber kebenaran: `Open_Grounds_PRD_v4.1_Hackathon.md`** (lokal, tidak di git: di root repo, atau salinannya di `~/Downloads/`). Aturan di bawah adalah ringkasan wajibnya. Bila kode dan PRD berbeda, PRD yang benar; bila PRD menandai **[Terbuka]**, tanya Nuza, jangan menebak.
+**Sumber kebenaran: `Open_Grounds_PRD_v4.1_Hackathon.md`** (lokal, tidak di git: di root repo, atau salinannya di `~/Downloads/`). Aturan di bawah adalah ringkasan wajibnya. Bila kode dan PRD berbeda, PRD yang benar; bila PRD menandai **[Terbuka]**, tanya, jangan menebak.
 
-**Status migrasi:** kontrak (53 tes), `packages/shared` (rumus, formulir owner), `packages/verification` (gerbang KYB, silang-cek), skema `db/00–03`, backend dan halaman platform, serta README sudah di model v4.1 (build Next lulus). Belum teruji end-to-end di Sepolia: butuh Supabase + Privy + deploy registry oleh Nuza. Masih tertinggal: script e2e baru, data contoh, model 3D per jenis lapangan di halaman produk, tes TS untuk flow platform.
+**Status migrasi:** kontrak (53 tes), `packages/shared` (rumus, formulir owner), `packages/verification` (gerbang KYB, silang-cek), skema `db/00–03`, backend dan halaman platform, serta README sudah di model v4.1 (build Next lulus). Belum teruji end-to-end di Sepolia: butuh Supabase + Privy + deploy registry. Masih tertinggal: script e2e baru, data contoh, model 3D per jenis lapangan di halaman produk, tes TS untuk flow platform.
 
 ## Model (PRD v4.1 §2–4)
 
@@ -26,7 +26,7 @@ Produk: **Open Grounds** (platform) + **Grounds** (SPV penerbit token). Logo `OG
 ## On-chain (§6): chain = wasit, bukan database
 
 - Kontrak (OZ v5, Foundry, **tanpa proxy**): `AttestationRegistry` (EIP-712 2-of-3, domain `OpenGroundsAttestation`, anti-replay per `(kind, seriesId, refId)`), `SeriesToken` (ERC-20 `decimals=0`, fungsi gaya ERC-3643 lite: `isVerified`, `canTransfer` dengan kode alasan, `freeze`, `forcedTransfer`; jangan diklaim patuh ERC-3643), `VenueSeries` (state machine, alokasi, jual balik, posting periode, waterfall, akumulator, kewajiban, Overdue/Default, likuidasi).
-- **Siapa menyetujui apa (keputusan Nuza, menggantikan PRD §6.5):** 2-of-3 lewat `AttestationRegistry` hanya untuk keputusan yang tidak boleh diambil platform sendirian: `ACQUISITION_CLOSED` (verifikasi aset → token boleh terbit; PLATFORM + OWNER; SPV lebih dulu menyetujui pembelian di aplikasi), `REVENUE_PERIOD` (angka waterfall bulanan; PLATFORM + OWNER, atau PLATFORM + VERIFIER bila owner diam melewati tenggat; beda angka → `Disputed`, VERIFIER menengahi), `VALUATION_UPDATE` (PLATFORM + VERIFIER). **Beli dan jual balik:** investor menandatangani pesanan EIP-712 (`Order` / `SellBack`, domain `OpenGroundsSeries`) lewat Privy, platform (`CONTROLLER`) mengeksekusi setelah rupiah masuk. **Jatah sudah dibayar:** platform saja (`settlePayout`), tidak bisa melebihi kewajiban. Owner dan investor sama-sama memakai wallet Privy.
+- **Siapa menyetujui apa (menggantikan PRD §6.5):** 2-of-3 lewat `AttestationRegistry` hanya untuk keputusan yang tidak boleh diambil platform sendirian: `ACQUISITION_CLOSED` (verifikasi aset → token boleh terbit; PLATFORM + OWNER; persetujuan pembelian SPV tercakup saat mengajukan venue, tanpa klik persetujuan ulang), `REVENUE_PERIOD` (angka waterfall bulanan; PLATFORM + OWNER, atau PLATFORM + VERIFIER bila owner diam melewati tenggat; beda angka → `Disputed`, VERIFIER menengahi), `VALUATION_UPDATE` (PLATFORM + VERIFIER). **Beli dan jual balik:** investor menandatangani pesanan EIP-712 (`Order` / `SellBack`, domain `OpenGroundsSeries`) lewat Privy, platform (`CONTROLLER`) mengeksekusi setelah rupiah masuk. **Jatah sudah dibayar:** platform saja (`settlePayout`), tidak bisa melebihi kewajiban. Owner dan investor sama-sama memakai wallet Privy.
 - Kontrak memeriksa: `paidIdr == tokens × refPrice`; tanda tangan pesanan milik investor penerimanya; pesanan tidak kedaluwarsa dan tidak dipakai ulang; total alokasi ≤ saldo treasury; penerima di allowlist dan tidak dibekukan; potongan ≤ gross; `opex ≤ maxOpexBps × gross`; periode tidak diposting dua kali; pembayaran jatah tidak melebihi kewajiban; `markOverdue`/`markDefaulted` boleh dipanggil siapa pun setelah tenggat.
 - Transfer: treasury → investor (allowlist + `PAYMENT_SETTLED`), investor → treasury (lot terbuka, `Active`, `SELLBACK_SETTLED`), **investor → investor dilarang**, `forcedTransfer` hanya `CONTROLLER` dengan kode alasan.
 - Lot per alokasi `{amount, unlockAt}`, kunci 6 bulan [Asumsi] sebagai parameter seri (demo boleh dipendekkan, berlabel "demo mode"), FIFO, maks 32 lot per alamat.
@@ -36,7 +36,7 @@ Produk: **Open Grounds** (platform) + **Grounds** (SPV penerbit token). Logo `OG
 - Rupiah, saldo ledger, dan penarikan **di luar chain**. Data pribadi tidak pernah ke chain (hanya status allowlist dan hash bukti).
 - Invarian Foundry wajib (PRD §6.7, disesuaikan): supply tetap setelah `activate`, Σsaldo = totalSupply, tidak ada transfer investor→investor, lot terkunci tidak keluar, pesanan tidak dipakai ulang, nominal salah revert, token tidak terbit tanpa tanda tangan investor, potongan > gross revert, akumulator × supply + dust = Σ pool. Skenario demo "platform curang ditolak" §6.8 (versi kita: tanpa tanda tangan investor, nominal salah, transfer antar investor, opex di atas plafon, posting ulang periode, laba bulanan tanpa owner).
 
-## Persetujuan review KYB (keputusan Nuza terbaru)
+## Persetujuan review KYB
 
 - Wallet tanda tangan review `operator` boleh akun MetaMask pilihan operator yang sedang login; alamatnya ikut ditandatangani dan dicatat di audit. Tidak wajib sama dengan hot wallet PLATFORM. Wallet `reviewer` tetap harus verifier terdaftar. Aturan wallet on-chain tidak berubah.
 - Pengajuan wajib mendapat dua persetujuan SETUJU yang ditandatangani lewat MetaMask: satu `operator` dan satu `reviewer` independen. Satu suara tidak mengubah status menjadi APPROVED dan tidak mendeploy kontrak.
@@ -44,7 +44,7 @@ Produk: **Open Grounds** (platform) + **Grounds** (SPV penerbit token). Logo `OG
 - Dua suara harus dari identitas serta wallet yang berbeda, untuk snapshot bukti dan nilai aset yang sama. Suara yang sudah diverifikasi tetap tersimpan; perubahan bukti membuat suara lama tidak berlaku untuk pengajuan terkini.
 - Setelah kuorum review lengkap, kontrak seri otomatis disiapkan. Token belum terbit: persetujuan pengalihan hak oleh owner tetap diperlukan dalam ACQUISITION_CLOSED.
 
-## Peran (keputusan Nuza)
+## Peran
 
 `owner` (penjual hak), `investor`, `operator` (tim internal Open Grounds), `reviewer` (pihak luar independen: review KYB + slot VERIFIER), `spv` (Grounds, pembeli hak: menyetujui akuisisi, treasury, modal, cadangan buyback; akun dibuat operator lewat undangan). Slot PLATFORM di kontrak mewakili Grounds via Open Grounds; kontrak tetap 3 slot. Demo jujur: operator dan SPV dipegang tim yang sama.
 
@@ -84,4 +84,4 @@ Alur P0 PRD §9.3 jalan end-to-end di Sepolia lewat web; `forge test` (termasuk 
 
 ## Gaya kerja
 
-User dipanggil Nuza, bahasa Indonesia santai di chat; kode, komentar, dan identifier Inggris.
+Harga awal token boleh berbeda per pengajuan: offering.tokenPrice, default Rp10.000. Disimpan pada venues.integrations.initialTokenPriceIdr, ikut snapshot review, valuasi, supply, dan attestation. Tidak mengubah harga seri yang sudah aktif.

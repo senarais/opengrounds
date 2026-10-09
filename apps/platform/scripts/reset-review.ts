@@ -13,7 +13,7 @@ async function main() {
   if (se) throw new Error(se.message);
   const archived: { series: unknown; attestations: unknown }[] = [];
   for (const s of series ?? []) {
-    if (s.spv_approved_at || !["Draft", "Verified"].includes(s.status)) throw new Error("Acquisition already approved or series in use; refusing reset");
+    if (!["Draft", "Verified"].includes(s.status)) throw new Error("Series already in use; refusing reset");
     if (s.contract_address) {
       const chain = await readSeries(s.contract_address);
       if (!["Draft", "Verified"].includes(chain.state) || chain.supply !== 0n || chain.circulating !== 0n) throw new Error("Contract already activated; refusing reset");
@@ -39,7 +39,7 @@ async function main() {
   if (reset.error) throw new Error("Review changed; reset cancelled");
   for (const s of series ?? []) {
     // Attestations cascade. Their prior contents, including the unused contract address, are preserved above.
-    const removed = await pf.from("series").delete().eq("id", s.id).in("status", ["Draft", "Verified"]).is("spv_approved_at", null).select("id").single();
+    const removed = await pf.from("series").delete().eq("id", s.id).in("status", ["Draft", "Verified"]).select("id").single();
     if (removed.error) throw new Error("Review reopened but unused series could not be removed; inspect before approving again");
   }
   console.log(JSON.stringify({ caseId, status: "IN_REVIEW", archivedUnusedSeries: series?.length ?? 0, auditPreserved: true }));

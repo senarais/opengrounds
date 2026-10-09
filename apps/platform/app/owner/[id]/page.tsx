@@ -58,12 +58,12 @@ export default async function OwnerVenue({ params, searchParams }: { params: Pro
         {kc?.status === "REJECTED" && <p className="small muted">Anda dapat melengkapi data dan mengajukan ulang sebagai pengajuan baru.</p>}
       </Card>
 
-      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="KYB disetujui.">{s.spv_approved_at ? "Grounds (SPV) sudah setuju membeli; menunggu platform menyiapkan tanda tangan." : "Menunggu Grounds (SPV) menyetujui pembelian hak Anda. Setelah itu Anda diminta menandatangani akuisisi."}</Notice></div>}
+      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="Review disetujui">Platform sedang menyiapkan tanda tangan akuisisi. Setelah tersedia, periksa detail pengalihan hak dan pembayaran lalu tanda tangani lewat wallet Anda.</Notice></div>}
       {acq && (
         <Card title="Tanda tangan akuisisi" subtitle="ACQUISITION_CLOSED: platform + owner" tone="accent" className="mt">
-          <p className="small">Anda adalah penjual. Dengan menandatangani, Anda menyatakan: hak manfaat ekonomi <b>{(s!.stake_bps / 100).toFixed(0)}%</b> atas laba bersih venue ini dialihkan ke Grounds, dan dana <b>{rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}</b> sudah Anda terima (<b>simulasi</b>, tidak ada uang sungguhan). Setelah tanda tangan platform dan Anda lengkap, {Number(s!.supply).toLocaleString("id-ID")} token dicetak sekali ke treasury Grounds.</p>
+          <p className="small">Anda adalah penjual. Dengan menandatangani, Anda menyatakan: hak manfaat ekonomi <b>{(s!.stake_bps / 100).toLocaleString("id-ID")}%</b> atas laba bersih venue ini dialihkan ke Grounds, dan dana <b>{rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}</b> sudah Anda terima (<b>simulasi</b>, tidak ada uang sungguhan). Setelah tanda tangan platform dan Anda lengkap, {Number(s!.supply).toLocaleString("id-ID")} token dicetak sekali ke treasury Grounds.</p>
           <KV rows={[["Valuasi (V)", rp(Number(s!.valuation_idr))], ["Harga referensi", rp(Number(s!.ref_price))], ["Grounds (SPV) via Open Grounds", (acq.signatures ?? []).some((x: any) => x.slot === "PLATFORM") ? <Badge tone="ok">sudah</Badge> : "belum"], ["Anda", acqSigned ? <Badge tone="ok">sudah</Badge> : "belum"]]} />
-          {!acqSigned && <div style={{ marginTop: 10 }}><AttestSignButton attId={acq.id} via="privy" chainId={chain.id} label="Tanda tangani akuisisi (simulasi)" confirmText="Anda menyatakan hak X% dialihkan dan dana diterima. Ini simulasi di testnet. Lanjutkan?" /></div>}
+          {!acqSigned && <div style={{ marginTop: 10 }}><AttestSignButton attId={acq.id} via="privy" chainId={chain.id} label="Tanda tangani akuisisi (simulasi)" confirmText={`Anda menyatakan ${(s!.stake_bps / 100).toLocaleString("id-ID")}% hak manfaat ekonomi atas laba bersih yang bisa dibagikan dari ${v.name} dialihkan ke Grounds, dan dana ${rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))} telah diterima. Ini simulasi di testnet; tidak ada uang sungguhan yang dipindahkan.`} /></div>}
         </Card>
       )}
 

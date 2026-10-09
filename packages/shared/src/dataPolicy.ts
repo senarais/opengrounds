@@ -26,6 +26,7 @@ export const VISIBILITY_LABEL: Record<Visibility, string> = {
 };
 
 export const DATA_CATALOG: DataItem[] = [
+  { id: "venue_photos", label: "Foto venue dan ilustrasi demo beratribusi", purpose: "Menampilkan kondisi yang diajukan; foto referensi demo dilabeli dan bukan bukti venue.", visibility: "public", ai: "tidak", where: "Galeri produk/review; storage privat dengan tautan foto berlaku 1 jam", required: false },
   { id: "profile", label: "Profil venue: nama, kota, provinsi, jenis olahraga, daftar lapangan (ukuran, lantai, tarif), jam operasi, tujuan dana", purpose: "Investor menilai kapasitas dan kewajaran pendapatan venue.", visibility: "public", ai: "tidak", where: "Halaman produk; hash-nya terikat ke attestation ACQUISITION_CLOSED", required: true },
   { id: "financial_summary", label: "Ringkasan keuangan bulanan: omzet kotor dan laba bersih yang bisa dibagikan (D), porsi pembayaran digital", purpose: "Rumus valuasi memakai D12; input dan hasilnya wajib transparan ke investor (PRD §4.1).", visibility: "public", ai: "tidak", where: "Halaman produk", required: true },
   { id: "valuation", label: "Valuasi: nilai aset (input reviewer, berlabel), D12, r, V, imbal hasil tersirat, X, jumlah token, harga referensi", purpose: "Menjelaskan dari mana harga referensi berasal.", visibility: "public", ai: "tidak", where: "Halaman produk + kontrak (angka valuasi, supply, harga referensi)", required: true },

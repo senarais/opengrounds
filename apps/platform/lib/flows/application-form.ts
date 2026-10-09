@@ -30,7 +30,7 @@ export async function buildApplication(fd: FormData): Promise<{ input: Onboardin
       },
       financials: parsed.months,
       debt: { outstanding: num(fd.get("debtOutstanding")) ?? 0, monthlyInstallment: num(fd.get("debtInstallment")) ?? 0, lender: String(fd.get("debtLender") ?? ""), covenantRestricts: fd.get("covenantRestricts") === "on" },
-      offering: { stakeBps: num(fd.get("stakeBps")), useOfFunds: fd.get("useOfFunds") },
+      offering: { tokenPrice: Number(fd.get("tokenPrice") || 10_000), stakeBps: num(fd.get("stakeBps")), useOfFunds: fd.get("useOfFunds") },
       payout: { bank: fd.get("bank"), accountName: fd.get("accountName"), accountNumber: fd.get("accountNumber") },
       integrations: { gatewayOnly: fd.get("gatewayOnly") === "on", bankDataAccess: fd.get("bankDataAccess") === "on" },
       consent: { dataProcessing: fd.get("dataProcessing") === "on", truthful: fd.get("truthful") === "on" },

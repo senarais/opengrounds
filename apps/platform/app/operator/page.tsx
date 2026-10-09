@@ -49,7 +49,7 @@ export default async function Operator({ searchParams }: { searchParams: Promise
           <Card key={s.id} className="mt" title={<>{s.venues?.name} · {s.symbol}</>} subtitle={<span className="mono small">{s.contract_address}</span>}>
             <div className="row"><Badge tone={info.state === "Active" ? "ok" : info.state === "Verified" ? "info" : "bad"}>{info.state}</Badge><span className="small muted">{Number(info.circulating).toLocaleString("id-ID")}/{Number(info.supply).toLocaleString("id-ID")} beredar · {info.holderCount.toString()} pemegang · periode {info.lastPeriodId.toString()} · sengketa terbuka {info.openDisputes.toString()}</span></div>
             {(atts ?? []).length > 0 && <p className="small" style={{ marginTop: 6 }}>Menunggu tanda tangan: {atts!.map((a) => `${a.kind} (${(a.signatures ?? []).map((x: any) => x.slot).join("+") || "-"})`).join(" · ")}</p>}
-            {info.state === "Verified" && <p className="small muted" style={{ marginTop: 6 }}>{s.spv_approved_at ? "Menunggu tanda tangan owner (penjual)." : "Menunggu persetujuan pembelian dari Grounds (SPV)."}</p>}
+            {info.state === "Verified" && <p className="small muted" style={{ marginTop: 6 }}>Menunggu konfirmasi akuisisi dan tanda tangan owner (penjual).</p>}
             <div className="chips" style={{ marginTop: 10 }}>{ACCOUNTS.map(([a, l], i) => <div className="chip" key={a}><b>{l}</b><span>{rp(bal[i]!)}</span></div>)}</div>
             <p className="small muted">Semua rekening di atas disimulasikan (sandbox).</p>
 

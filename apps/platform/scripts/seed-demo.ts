@@ -4,6 +4,9 @@
  *   pnpm --filter @venue-rwa/platform seed:demo -- kopiKenangan@gmail.com
  * Akun owner dibuat bila belum ada (kata sandi acak dicetak sekali). Pemeriksaan otomatis (AI) dijalankan bila LLM_API_KEY terisi.
  */
+import { DEMO_PHOTOS } from "../lib/demo-photos";
+import { provisionPos } from "../lib/flows/provision";
+import { seedPosDemo } from "./seed-pos-demo";
 import { randomBytes } from "node:crypto";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { OnboardingInput, serviceClient, type FinancialMonth } from "@venue-rwa/shared";
@@ -11,8 +14,16 @@ import { runAutomatedCheck } from "../lib/flows/kyb";
 import { submitOnboarding, type DocKindAll } from "../lib/flows/onboarding";
 
 const email = (process.argv.slice(2).find((a) => a.includes("@")) ?? "kopiKenangan@gmail.com").trim().toLowerCase();
-const COMPANY = "PT Arena Kenangan Sejahtera";
-const VENUE = "Kenangan Arena Futsal & Padel";
+const variant = process.argv.find((a) => a.startsWith("--variant="))?.split("=")[1];
+const examples = {
+  futsal: { company: "PT Demo Senja Olahraga", name: "Demo Senja Futsal", sport: "futsal", price: 5000, tariff: 150000, scale: 0.5, stake: 3000, asset: 1500000000, length: 25, width: 15 },
+  padel: { company: "PT Demo Rimba Olahraga", name: "Demo Rimba Padel", sport: "padel", price: 10000, tariff: 300000, scale: 1, stake: 4000, asset: 3000000000, length: 20, width: 10 },
+  tenis: { company: "PT Demo Langit Olahraga", name: "Demo Langit Tenis", sport: "tenis", price: 25000, tariff: 450000, scale: 1.5, stake: 5000, asset: 5000000000, length: 23.77, width: 10.97 },
+} as const;
+if (variant && !(variant in examples)) throw new Error("Unknown demo variant");
+const example = variant ? examples[variant as keyof typeof examples] : null;
+const COMPANY = example?.company ?? "PT Arena Kenangan Sejahtera";
+const VENUE = example?.name ?? "Kenangan Arena Futsal & Padel";
 const rp = (n: number) => "Rp" + n.toLocaleString("id-ID");
 
 function wrap(t: string, f: any, size: number, width: number): string[] {
@@ -53,7 +64,7 @@ function financials(): FinancialMonth[] {
   const season = [0.9, 0.85, 0.95, 1.0, 1.05, 1.15, 1.2, 1.1, 1.0, 1.0, 0.95, 1.15];
   return Array.from({ length: 12 }, (_, i) => {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12 + i, 1));
-    const gross = Math.round((80_000_000 * season[d.getUTCMonth()]!) / 100_000) * 100_000;
+    const gross = Math.round((80_000_000 * (example?.scale ?? 1) * season[d.getUTCMonth()]!) / 100_000) * 100_000;
     const r = (p: number) => Math.round(gross * p);
     return {
       month: d.toISOString().slice(0, 7), gross, refunds: r(0.02), opex: r(0.5), tax: r(0.09), operatorFee: r(0.07), reserve: r(0.04), platformFee: r(0.03),
@@ -106,15 +117,20 @@ async function ensureOwner(): Promise<string> {
         { name: "Badminton 2", sport: "badminton", lengthM: 13.4, widthM: 6.1, surface: "vinyl", indoor: true, pricePerHour: 90_000 },
       ],
     },
-    land: { owned: true, rightType: "HGB", certificateNumber: "10.05.12.17.1.00482", holderName: COMPANY, encumbered: false, encumbranceConsent: false, permits: ["PBG", "SLF"], assetValue: 3_000_000_000 },
+    land: { owned: true, rightType: "HGB", certificateNumber: "10.05.12.17.1.00482", holderName: COMPANY, encumbered: false, encumbranceConsent: false, permits: ["PBG", "SLF"], assetValue: example?.asset ?? 3_000_000_000 },
     financials: fin,
     debt: { outstanding: 0, monthlyInstallment: 0, lender: "", covenantRestricts: false },
-    offering: { stakeBps: 4000, useOfFunds: "Renovasi atap dan pencahayaan lapangan futsal, serta penambahan satu lapangan padel." },
+    offering: { tokenPrice: example?.price ?? 10000, stakeBps: example?.stake ?? 4000, useOfFunds: "Renovasi atap dan pencahayaan lapangan futsal, serta penambahan satu lapangan padel." },
     payout: { bank: "BCA", accountName: COMPANY, accountNumber: "8830456712" },
     integrations: { gatewayOnly: true, bankDataAccess: true },
     consent: { dataProcessing: true, truthful: true },
   });
 
+  if (example) {
+    input.venue.sports = [example.sport];
+    input.venue.facilities = [1, 2, 3].map((i) => ({ name: `${example.sport} ${i}`, sport: example.sport, lengthM: example.length, widthM: example.width, surface: "vinyl", indoor: example.sport === "futsal", pricePerHour: example.tariff }));
+    input.offering.useOfFunds = "DATA DEMO SINTETIS: renovasi lapangan. Foto adalah referensi eksternal, bukan kondisi venue ini.";
+  }
   const files: { kind: DocKindAll; file: File }[] = [
     { kind: "deed", file: await pdf("Akta Pendirian Perseroan Terbatas", [
       `AKTA PENDIRIAN ${COMPANY.toUpperCase()}`, "Nomor: 47", "Tanggal: 18 Februari 2021",
@@ -139,12 +155,26 @@ async function ensureOwner(): Promise<string> {
   const csv = ["bulan,bruto,refund,biaya_operasional,pajak,fee_operator,cadangan,fee_platform,omzet_digital", ...fin.map((m) => [m.month, m.gross, m.refunds, m.opex, m.tax, m.operatorFee, m.reserve, m.platformFee, m.digitalGross].join(","))].join("\n");
   files.push({ kind: "sales_data", file: new File([csv], "penjualan.csv", { type: "text/csv" }) });
 
+  if (variant) {
+    const photo = DEMO_PHOTOS[variant as keyof typeof DEMO_PHOTOS];
+    const page = await fetch(photo.source, { headers: { "User-Agent": "OpenGroundsHackathonDemo/1.0" } });
+    if (!page.ok) throw new Error(`Photo source HTTP ${page.status}`);
+    const html = await page.text();
+    const original = html.match(/class="fullImageLink"[\s\S]*?<a href="([^"]+)"/i)?.[1]?.replaceAll("&amp;", "&");
+    if (!original || !original.startsWith("https://upload.wikimedia.org/")) throw new Error("Original image not found");
+    const image = await fetch(original);
+    if (!image.ok) throw new Error(`Photo download HTTP ${image.status}`);
+    files.push({ kind: "photo", file: new File([await image.arrayBuffer()], `demo-reference-${variant}.jpg`, { type: "image/jpeg" }) });
+  }
   const db = serviceClient("platform");
   const { data: dup } = await db.from("venues").select("id, organizations!inner(owner_user_id)").eq("name", VENUE).eq("organizations.owner_user_id", ownerId).limit(1);
-  if (dup?.length) { console.log("Venue contoh ini sudah ada untuk owner tersebut; tidak dibuat ulang."); return; }
+  if (dup?.length) { console.log("Venue demo sudah ada; pengajuan tidak digandakan."); return; }
 
   const r = await submitOnboarding(ownerId, input, files, "seed:demo");
   console.log(`Pengajuan dibuat: venue ${r.venueId}, kasus KYB ${r.caseId} (status SUBMITTED)`);
+  const pos = await provisionPos(r.venueId);
+  await db.schema("pos").from("companies").update({ synthetic: true }).eq("id", pos.companyId);
+  await seedPosDemo(pos.companyId, 12, example?.tariff ?? 200000);
   try {
     const c = await runAutomatedCheck(r.caseId);
     console.log(`Pemeriksaan otomatis selesai: ${c.summary.counts.critical} critical, ${c.summary.counts.high} high, ${c.summary.counts.medium} medium. Buka /review.`);

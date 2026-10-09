@@ -53,7 +53,7 @@ export function kybGate(input: OnboardingInput, docKinds: string[], opts: { asse
   if (fin.d12 <= 0) {
     out.push(finding({ agent: "reconciliation", checkType: "valuation", code: "NO_DISTRIBUTABLE", severity: "critical", text: "D12 tidak positif: venue tidak menghasilkan laba yang bisa dibagikan", fieldPaths: ["financials"] }));
   } else {
-    const v = valuation({ assetValue, d12: fin.d12, requiredYieldBps: p.requiredYieldBps, stakeBps: input.offering.stakeBps, tokenPrice: p.tokenPrice, yieldMinBps: p.yieldMinBps, yieldMaxBps: p.yieldMaxBps });
+    const v = valuation({ assetValue, d12: fin.d12, requiredYieldBps: p.requiredYieldBps, stakeBps: input.offering.stakeBps, tokenPrice: input.offering.tokenPrice ?? p.tokenPrice, yieldMinBps: p.yieldMinBps, yieldMaxBps: p.yieldMaxBps });
     val = { ...v, assetValue, d12: fin.d12, requiredYieldBps: p.requiredYieldBps };
     if (!v.inBand)
       out.push(finding({ agent: "risk", checkType: "sanity_gate", code: "YIELD_OUT_OF_BAND", severity: "medium",

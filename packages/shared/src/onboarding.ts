@@ -117,6 +117,7 @@ export const OnboardingInput = z
       covenantRestricts: z.boolean(),
     }),
     offering: z.object({
+      tokenPrice: z.number().int().min(1000).max(100_000_000).optional(),
       stakeBps: z.number().int().min(MIN_STAKE_BPS, `Minimal ${MIN_STAKE_BPS / 100}%`).max(MAX_STAKE_BPS, `Maksimal ${MAX_STAKE_BPS / 100}%`),
       useOfFunds: z.string().trim().min(10, "Jelaskan rencana penggunaan dana (minimal 10 karakter)").max(400),
     }),

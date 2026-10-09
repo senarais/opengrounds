@@ -122,3 +122,21 @@ describe("gerbang KYB (deterministik)", () => {
   });
   it("deterministik", () => expect(kybGate(input(), ALL_DOCS)).toEqual(kybGate(input(), ALL_DOCS)));
 });
+
+
+describe("per-venue initial token pricing", () => {
+  it.each([5000, 10000, 25000])("binds supply and reference price to Rp%s", (price) => {
+    const example = input();
+    example.offering.tokenPrice = price;
+    const result = kybGate(example, ["deed", "nib", "npwp", "land_certificate", "bank_statement"]);
+    expect(result.valuation?.refPrice).toBe(price);
+    expect(result.valuation!.supply * price * 10000).toBe(result.valuation!.v * example.offering.stakeBps);
+  });
+  it("rejects a nonpositive or fractional nominal price", () => {
+    for (const price of [0, -1, 5000.5]) {
+      const example = input();
+      example.offering.tokenPrice = price;
+      expect(OnboardingInput.safeParse(example).success).toBe(false);
+    }
+  });
+});

@@ -123,9 +123,10 @@ export function ApplyForm({ action, error, withOwnerEmail }: { action: (fd: Form
       </Section>
 
       <Section title="6. Penawaran" hint="Anda menjual hak atas sebagian laba bersih yang bisa dibagikan, bukan omzet dan bukan kepemilikan venue.">
+        <F label="Harga awal per token (Rp)"><input className="input" name="tokenPrice" type="number" min={1000} max={100000000} step={1000} defaultValue={10000} required /></F>
         <F label={`Porsi hak ekonomi yang dijual (X): ${stake / 100}%`}><input type="range" name="stakeBps" min={MIN_STAKE_BPS} max={MAX_STAKE_BPS} step={100} value={stake} onChange={(e) => setStake(Number(e.target.value))} /></F>
         <F label="Rencana penggunaan dana"><textarea className="input" name="useOfFunds" required minLength={10} maxLength={400} rows={3} /></F>
-        <p className="small muted">Harga dan jumlah token dihitung sistem dari valuasi (laba bersih terverifikasi, bukan dari permintaan Anda).</p>
+        <p className="small muted">Harga awal diajukan untuk ditinjau. Jumlah token dihitung dari valuasi dan harga awal, lalu dikunci saat penerbitan.</p>
       </Section>
 
       <Section title="7. Rekening tujuan owner" hint="Atas nama badan usaha. Disimpan tersamarkan.">
@@ -141,7 +142,8 @@ export function ApplyForm({ action, error, withOwnerEmail }: { action: (fd: Form
         <label className="small"><input type="checkbox" name="bankDataAccess" /> Saya mengizinkan akses data rekening koran untuk rekonsiliasi</label>
         <label className="small"><input type="checkbox" name="dataProcessing" required /> Saya setuju data diproses, termasuk analisis AI atas teks dokumen yang sudah disamarkan</label>
         <label className="small"><input type="checkbox" name="truthful" required /> Saya menyatakan data ini benar</label>
-        <button className="btn primary lg">Ajukan untuk diverifikasi</button>
+        {withOwnerEmail && <p className="small muted">Mengirim pengajuan ini sekaligus menyatakan persetujuan Grounds atas rencana pembelian hak ekonomi yang tercantum. Setelah operator dan reviewer menyetujui, owner tetap harus mengonfirmasi pengalihan hak dan pembayaran lewat tanda tangan wallet. Tidak ada tombol persetujuan pembelian ulang.</p>}
+        <button className="btn primary lg">{withOwnerEmail ? "Ajukan pembelian hak untuk direview" : "Ajukan untuk diverifikasi"}</button>
       </Section>
     </form>
   );

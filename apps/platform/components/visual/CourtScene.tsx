@@ -122,7 +122,17 @@ function Court({ f, pos, L, W, occ, night, picked, onPick, index }: { f: CourtFa
         <Line p={[0, 0, W / 2 - lw / 2]} s={[L, 0.01, lw]} /><Line p={[0, 0, -W / 2 + lw / 2]} s={[L, 0.01, lw]} />
         <Line p={[L / 2 - lw / 2, 0, 0]} s={[lw, 0.01, W]} /><Line p={[-L / 2 + lw / 2, 0, 0]} s={[lw, 0.01, W]} />
         <Line p={[0, 0, 0]} s={[lw, 0.01, W]} />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}><ringGeometry args={[Math.min(L, W) * 0.13, Math.min(L, W) * 0.13 + lw, 32]} /><meshStandardMaterial color="#ffffff" /></mesh>
+        {["futsal", "mini soccer", "basket"].includes(f.sport) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}><ringGeometry args={[Math.min(L, W) * 0.13, Math.min(L, W) * 0.13 + lw, 32]} /><meshStandardMaterial color="#ffffff" /></mesh>}
+        {["badminton", "tenis", "padel"].includes(f.sport) && <>
+          {[-1, 1].map((side) => <Line key={side} p={[side * L * 0.3, 0, 0]} s={[lw, 0.01, W]} />)}
+          <Line p={[0, 0, 0]} s={[L * 0.6, 0.01, lw]} />
+          {f.sport !== "padel" && [-1, 1].map((side) => <Line key={`sideline-${side}`} p={[0, 0, side * W * 0.38]} s={[L, 0.01, lw]} />)}
+        </>}
+        {f.sport === "voli" && [-1, 1].map((side) => <Line key={side} p={[side * L / 6, 0, 0]} s={[lw, 0.01, W]} />)}
+        {["futsal", "mini soccer", "basket"].includes(f.sport) && [-1, 1].map((side) => <group key={side}>
+          <Line p={[side * L * 0.32, 0, 0]} s={[lw, 0.01, W * 0.55]} />
+          {[-1, 1].map((edge) => <Line key={edge} p={[side * L * 0.41, 0, edge * W * 0.275]} s={[L * 0.18, 0.01, lw]} />)}
+        </group>)}
       </group>
       <group position={[0, 0.08, 0]}><Fixtures sport={f.sport} L={L} W={W} /></group>
       {people.map((p, k) => <Person key={k} x={p.x} z={p.z} color={p.c} i={k + index * 10} />)}

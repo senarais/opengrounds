@@ -11,7 +11,8 @@
     "reset:storage": "tsx --env-file=../../.env scripts/reset-storage.ts",
     "staff:create": "tsx --env-file=../../.env scripts/create-staff.ts",
     "chain:e2e": "tsx scripts/chain-e2e.ts",
-    "seed:demo": "tsx --env-file=../../.env scripts/seed-demo.ts"
+    "seed:demo": "tsx --env-file=../../.env scripts/seed-demo.ts",
+    "test": "vitest run test"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.65",
@@ -42,6 +43,7 @@
     "pdf-lib": "1.17.1",
     "tsx": "4.19.2",
     "typescript": "5.7.2",
+    "vitest": "2.1.8",
     "write-excel-file": "2.0.2"
   }
 }

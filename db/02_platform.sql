@@ -231,7 +231,7 @@ create table platform.series (
   ref_price             bigint,
   valuation_idr         bigint,
   owner_wallet          text,                       -- slot COUNTERPARTY
-  spv_approved_by       text,                       -- Grounds (SPV) menyetujui pembelian hak sebelum platform menandatangani
+  spv_approved_by       text,                       -- pengaju SPV tercatat dari submission; tidak ada langkah persetujuan ulang
   spv_approved_at       timestamptz,
   spv_note              text,
   contract_address      text unique check (contract_address ~ '^0x[0-9a-fA-F]{40}$'),

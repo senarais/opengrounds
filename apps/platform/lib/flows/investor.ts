@@ -29,9 +29,29 @@ export async function mockKyc(userId: string, wallet: string | null, fullName: s
 
 export async function startDiditKyc(userId: string, wallet: string | null, origin: string) {
   const base = process.env.PLATFORM_URL || origin;
+  const db = platformDb();
+  const { data: record, error: recordError } = await db.from("kyc_records").select("status").eq("user_id", userId).maybeSingle();
+  if (recordError) throw new Error(recordError.message);
+  if (isVerified(record)) return `${base}/portfolio`;
+  const { data: current, error: currentError } = await db.from("kyc_sessions").select("session_id, url, state").eq("user_id", userId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  if (current?.state === "verified" || current?.state === "review") {
+    await syncDiditKyc(userId);
+    return `${base}/portfolio`;
+  }
+  if (current?.state === "pending" && current.url) return current.url;
   const s = await createSession({ vendorData: userId, callback: `${base}/portfolio?kyc=return` });
-  const { error } = await platformDb().from("kyc_sessions").insert({ user_id: userId, wallet, session_id: s.session_id, url: s.url, status: s.status, state: kycStateOf(s.status) });
-  if (error) throw new Error(error.message);
+  const { error } = await db.from("kyc_sessions").insert({ user_id: userId, wallet, session_id: s.session_id, url: s.url, status: s.status, state: kycStateOf(s.status) });
+  if (error) {
+    if (error.code !== "23505") throw new Error(error.message);
+    // A repeated provider response or concurrent request must not reassign a session.
+    const { data: existing, error: existingError } = await db.from("kyc_sessions").select("user_id, url, state").eq("session_id", s.session_id).maybeSingle();
+    if (existingError) throw new Error(existingError.message);
+    if (!existing || existing.user_id !== userId) throw new Error("Sesi verifikasi tidak cocok dengan akun Anda. Hubungi tim Open Grounds.");
+    if (existing.state === "verified" || existing.state === "review") return `${base}/portfolio`;
+    if (existing.state !== "pending") throw new Error("Sesi verifikasi sebelumnya sudah berakhir. Hubungi tim untuk memulai sesi baru.");
+    return existing.url || s.url;
+  }
   return s.url;
 }
 

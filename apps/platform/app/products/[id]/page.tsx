@@ -1,3 +1,4 @@
+import { VenueMedia } from "@/components/VenueMedia";
 import { notFound } from "next/navigation";
 import { Badge, Card, Flash, KV, Kpi, Notice, PageHeader } from "@venue-rwa/ui";
 import { DEMO_PARAMS } from "@venue-rwa/shared";
@@ -45,6 +46,8 @@ export default async function Product({ params, searchParams }: { params: Promis
       </PageHeader>
       <Flash ok={sp.ok} err={sp.err} />
       {bad && <Notice tone="bad" title={`Seri berstatus ${info.state}.`}>{info.state === "Overdue" ? "Jatah periode belum tersedia sampai tenggat. Pembelian dan jual balik ditutup sampai pulih." : "Pembelian dan jual balik ditutup. Status dibaca langsung dari kontrak."}</Notice>}
+
+      <VenueMedia venueId={v.id} name={v.name} area={`${v.city}, ${v.province}`} facilities={profile?.profile?.facilities ?? v.facilities ?? []} openHour={v.open_hour} closeHour={v.close_hour} />
 
       <div className="grid c4 mt">
         <Kpi label="Harga referensi" value={rp(Number(info.refPriceIdr))} hint="per token; harga yang dibayar, bukan penghasilan" />
