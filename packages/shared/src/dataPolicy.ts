@@ -26,6 +26,7 @@ export const VISIBILITY_LABEL: Record<Visibility, string> = {
 };
 
 export const DATA_CATALOG: DataItem[] = [
+  { id: "venue_ledger", label: "Transaksi venue dari ledger PoS: waktu, jenis (penjualan, refund, pajak, biaya gateway), nominal, status settle di payment gateway, dan hash entri", purpose: "Pemegang token memantau omzet yang menjadi dasar kantong investor secara realtime dan bisa mencocokkannya dengan hash harian on-chain", visibility: "kyc_investor", ai: "tidak", where: "pos.ledger_entries; ditampilkan di halaman detail token, hanya untuk pemegang token yang sudah KYC. Nama dan identitas pelanggan tidak pernah ditampilkan", required: false },
   { id: "profile", label: "Profil venue: nama, kecamatan, kota, provinsi, daftar lapangan (ukuran, lantai, tarif), tahun dibangun, asuransi", purpose: "Investor perlu menilai kewajaran proyeksi dan kapasitas venue.", visibility: "public", ai: "tidak", where: "Halaman penawaran (disclosure pack)", required: true },
   { id: "performance", label: "Kinerja: omzet bersih bulanan, okupansi, porsi pembayaran gateway/tunai/transfer", purpose: "Dasar harga dan proyeksi; porsi non-gateway diungkap karena tidak bisa diverifikasi.", visibility: "public", ai: "tidak", where: "Halaman penawaran", required: true },
   { id: "terms", label: "Syarat penawaran: target, harga token, bagian omzet, tenor, tujuan dana", purpose: "Syarat yang mengikat; hash-nya masuk bukti attestation.", visibility: "public", ai: "tidak", where: "Halaman penawaran + kontrak (hanya angka)", required: true },

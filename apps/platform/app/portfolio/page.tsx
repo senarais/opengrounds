@@ -17,6 +17,9 @@ import { xenditConfigured, xenditTestMode } from "@/lib/psp";
 import { kyc, refund, startDidit } from "./actions";
 
 export const dynamic = "force-dynamic";
+const STATE_ID: Record<string, [string, "ok" | "warn" | "bad" | "neutral" | "info"]> = {
+  Draft: ["Belum dibuka", "neutral"], Offering: ["Penawaran dibuka", "info"], Funded: ["Terdanai", "ok"], Active: ["Aktif", "ok"], Closed: ["Selesai", "neutral"], Failed: ["Gagal, refund", "bad"],
+};
 
 export default async function Portfolio({ searchParams }: { searchParams: Promise<{ kyc?: string; s?: string; ok?: string; err?: string; pay?: string }> }) {
   const sp = await searchParams;
@@ -112,11 +115,36 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
       {wallet && (
         <>
           <div className="grid c4 mt">
-            <Kpi label="Total dibayar" value={rp(totalPaid)} hint="rupiah simulasi" />
+            <Kpi label="Total dibayar" value={rp(totalPaid)} hint={xenditConfigured() ? `lewat Xendit${xenditTestMode() ? " (mode uji, bukan uang sungguhan)" : ""}` : "rupiah simulasi"} />
             <Kpi label="Nilai tebus (final)" value={rp(totalValue)} hint="estimasi" accent />
             <Kpi label="Seri dimiliki" value={held.length} />
           </div>
           <div className="mt"><Notice tone="warn" title="Ingat:">Tebus awal berarti kehilangan bagian masa depan. Nilai tebus mulai dari sekitar Rp0 dan hanya tumbuh seiring omzet terbukti.</Notice></div>
+
+          {held.length > 0 && (
+            <div className="mt">
+              <Card title="Token saya" subtitle="Semua token yang Anda pegang. Nilai tebus = bagian kantong investor per token × jumlah token (estimasi, bukan harga pasar).">
+                <div className="table-wrap"><table className="table">
+                  <thead><tr><th>Penawaran</th><th className="r">Token</th><th>Status</th><th className="r">Dibayar</th><th className="r">Nilai tebus</th><th className="r">Menuju impas</th></tr></thead>
+                  <tbody>{held.map((r) => {
+                    const value = Number(r.bal) * r.per;
+                    const basis = r.paid > 0 ? r.paid : Number(r.bal) * Number(r.info.unitPrice);
+                    const [label, tone] = STATE_ID[r.info.state] ?? [r.info.state, "neutral"];
+                    return (
+                      <tr key={r.series.id}>
+                        <td><Link href={`/portfolio/${r.series.id}`} style={{ fontWeight: 700 }}>{r.venue.name}</Link><div className="small muted">{r.series.token_symbol ?? ""} · {pct(r.series.share_bps / 10000)} omzet</div></td>
+                        <td className="r num">{r.bal.toString()}{r.locked > 0n && <div className="small muted">{r.locked.toString()} terkunci</div>}</td>
+                        <td><Badge tone={tone}>{label}</Badge></td>
+                        <td className="r num">{rp(r.paid)}</td>
+                        <td className="r num">{rp(value)}</td>
+                        <td className="r num">{basis > 0 ? `${Math.min(999, Math.round((value / basis) * 100))}%` : "–"}</td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table></div>
+              </Card>
+            </div>
+          )}
 
           <div className="section-title"><h2>Posisi Anda</h2></div>
           {held.length === 0 ? <Card><Empty>Belum ada token. <Link href="/offering" style={{ color: "var(--accent)", fontWeight: 700 }}>Lihat penawaran →</Link></Empty></Card> : (
@@ -126,13 +154,14 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
                 const canRedeem = ["Funded", "Active"].includes(r.info.state) || (r.info.state === "Closed" && r.info.S > 0n);
                 return (
                   <Card key={r.series.id} title={r.venue.name} subtitle={`${pct(r.series.share_bps / 10000)} omzet · ${r.series.token_symbol ?? ""} · ${r.info.state}`}
-                    actions={<Link className="btn sm" href={`/offering/${r.series.id}`}>Detail</Link>}>
+                    actions={<Link className="btn sm primary" href={`/portfolio/${r.series.id}`}>Detail token</Link>}>
                     <div className="row" style={{ gap: 8, marginBottom: 6 }}>
                       <span className="badge plain">{r.bal.toString()} token</span>
                       {r.locked > 0n && <span className="badge warn">{r.locked.toString()} terkunci untuk redeem</span>}
                       {r.paid === 0 && r.bal > 0n && <span className="badge info">diterima lewat transfer</span>}
                     </div>
                     <PoolJar label={r.paid > 0 ? "Posisi Anda" : "Posisi Anda (garis = harga awal token)"} paid={r.paid > 0 ? r.paid : Number(r.bal) * Number(r.info.unitPrice)} value={Number(r.bal) * r.per} />
+                    <p className="small" style={{ marginTop: 10 }}><Link href={`/portfolio/${r.series.id}`}>Lihat grafik, akrual berjalan, dan aktivitas →</Link></p>
                     {r.info.state === "Failed" && (
                       <>
                         <div className="divider" />
