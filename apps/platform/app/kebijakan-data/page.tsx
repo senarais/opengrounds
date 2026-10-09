@@ -30,20 +30,21 @@ export default function DataPolicy() {
       <div className="grid c2 mt">
         <Card title="Yang benar-benar dilakukan sistem">
           <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7, margin: 0 }}>
-            <li>Dokumen disimpan di penyimpanan privat. Tautan unduh hanya dibuat untuk staf dan investor ber-KYC, dan berlaku 5 menit.</li>
+            <li>Dokumen disimpan di penyimpanan privat. Tautan unduh hanya dibuat untuk staf (foto venue boleh publik), dan berlaku 5 menit.</li>
             <li>Identitas usaha, rekening, kontak, dan rincian keuangan internal disimpan di tabel tanpa akses dari browser; hanya server yang membacanya.</li>
             <li>Sebelum teks dokumen dikirim ke model AI, NIK, nomor rekening, telepon, dan email disamarkan. Gambar tidak dikirim; hanya teks hasil pembacaan. Model AI tidak punya akses ke alat atau jaringan, dan keluarannya divalidasi.</li>
-            <li>AI tidak menyetujui apa pun. Keputusan dari aturan deterministik dan penandatangan manusia (2 dari 3).</li>
-            <li>KTP dan selfie investor diproses penyedia KYC (Didit). Platform hanya menerima status.</li>
+            <li>AI tidak menyetujui apa pun dan tidak bisa mencetak token, mengubah rekening, atau memindahkan uang. Setiap temuan AI wajib ditinjau reviewer manusia; penerbitan token butuh tanda tangan platform dan owner.</li>
+            <li>KTP dan selfie investor diproses penyedia KYC (Didit). Platform hanya menerima status dan nama (untuk mencocokkan rekening bank). Tanpa Didit, KYC memakai mock berlabel sandbox.</li>
+            <li>Nomor rekening dan NIK disimpan tersamarkan (4 digit terakhir) beserta hash, bukan nomor utuh.</li>
             <li>Tidak ada data pribadi di blockchain: hanya alamat wallet, angka, dan hash. Karena sifat blockchain, catatan itu tidak bisa dihapus.</li>
             <li>Semua tindakan penting dicatat di jejak audit.</li>
           </ul>
         </Card>
         <Card title="Yang belum kami bangun">
           <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7, margin: 0 }}>
-            <li><b>Penghapusan otomatis (retensi).</b> Belum ada jadwal penghapusan data. Untuk produksi, kami mengusulkan: pengajuan yang ditolak dihapus setelah masa sanggah; data aktif disimpan selama tenor ditambah masa wajib simpan menurut hukum.</li>
+            <li><b>Penghapusan otomatis (retensi).</b> Belum ada jadwal penghapusan data. Untuk produksi, kami mengusulkan: pengajuan yang ditolak dihapus setelah masa sanggah; data aktif disimpan selama seri berjalan ditambah masa wajib simpan menurut hukum.</li>
             <li><b>Hak subjek data</b> (akses, koreksi, penghapusan, menarik persetujuan). Belum ada tombol; saat ini lewat permintaan manual ke penyelenggara. Penghapusan data yang terikat transaksi bisa dibatasi kewajiban hukum.</li>
-            <li><b>Verifikasi resmi NIB/NPWP</b> ke sumber pemerintah. Saat ini hanya format yang diperiksa.</li>
+            <li><b>Verifikasi resmi NIB/NPWP/akta</b> ke sumber pemerintah (AHU/OSS). Belum terintegrasi; saat ini format diperiksa dan dokumen yang diunggah disilang-cek.</li>
             <li><b>Pemberitahuan insiden</b> kepada pemilik data. Belum ada prosedur otomatis.</li>
             <li><b>Penilaian dampak pelindungan data</b> formal. Belum dilakukan.</li>
           </ul>

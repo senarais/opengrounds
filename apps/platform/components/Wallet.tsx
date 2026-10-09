@@ -1,257 +1,155 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { reviewMessage } from "@/lib/review-message";
-import { useInvestorSigner, type InvestorSigner } from "./signer-context";
+import { useInvestorSigner } from "./signer-context";
 
 declare global { interface Window { ethereum?: any } }
 
-async function connect(chainId: number) {
-  if (!window.ethereum) throw new Error("MetaMask tidak ditemukan. Pasang MetaMask di browser Anda.");
-  const [account] = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-  const hex = "0x" + chainId.toString(16);
-  try {
-    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
-  } catch (e: any) {
-    if (e?.code !== 4001) { /* chain tidak dikenal: biarkan wallet menolak saat sign */ }
-    else throw new Error("Perpindahan jaringan ditolak");
-  }
-  return account!;
+const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
+
+async function post(url: string, body: unknown) {
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || j.error) throw new Error(j.error ?? `Gagal (${res.status})`);
+  return j;
 }
 
-/** Investor menandatangani sebagai pemegang token: wallet Privy (dibuat otomatis) bila itu wallet akunnya, selain itu MetaMask. */
-async function signAsHolder(signer: InvestorSigner | null, holder: string, chainId: number, typedJson: string): Promise<string> {
-  if (signer && signer.address.toLowerCase() === holder.toLowerCase()) return signer.signTypedData(typedJson);
-  const account = await connect(chainId);
-  if (account.toLowerCase() !== holder.toLowerCase()) throw new Error("Pilih wallet yang terhubung ke akun ini di MetaMask");
+/** Tanda tangan dengan wallet Privy pengguna (investor/owner). Tanpa gas: platform yang mengirim transaksi. */
+function usePrivySign() {
+  const { signer, status, error } = useInvestorSigner();
+  return {
+    ready: !!signer,
+    status, error,
+    sign: async (typedJson: string) => {
+      if (!signer) throw new Error(status === "error" ? (error ?? "Wallet belum siap") : "Wallet Anda masih disiapkan, tunggu sebentar");
+      return signer.signTypedData(typedJson);
+    },
+  };
+}
+
+/** MetaMask (penanda tangan staf: verifier independen). */
+async function metamaskSign(typedJson: string, chainId: number): Promise<string> {
+  if (!window.ethereum) throw new Error("MetaMask tidak ditemukan. Pasang MetaMask dan pilih wallet verifier.");
+  const [account] = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
+  try { await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x" + chainId.toString(16) }] }); } catch { /* biarkan wallet menolak saat sign */ }
   return window.ethereum.request({ method: "eth_signTypedData_v4", params: [account, typedJson] });
 }
 
-/** Tanda tangan EIP-712 lewat MetaMask lalu kirim ke server. Tanpa gas. */
-export function SignTypedButton({ typedData, endpoint, body, chainId, label }: { typedData: string; endpoint: string; body: Record<string, unknown>; chainId: number; label: string }) {
-  const router = useRouter();
-  const [msg, setMsg] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  return (
-    <span>
-      <button className="btn primary" disabled={busy} onClick={async () => {
-        setBusy(true); setMsg("");
-        try {
-          const account = await connect(chainId);
-          const signature = await window.ethereum.request({ method: "eth_signTypedData_v4", params: [account, typedData] });
-          const res = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, signer: account, signature }) });
-          const j = await res.json();
-          if (!res.ok) throw new Error(j.error ?? "gagal");
-          setMsg("✓ " + j.message);
-          router.refresh();
-        } catch (e: any) { setMsg("✗ " + (e?.message ?? String(e))); } finally { setBusy(false); }
-      }}>{busy ? "Menunggu wallet…" : label}</button>
-      {msg && <span className="muted" style={{ marginLeft: 10 }}>{msg}</span>}
-    </span>
-  );
-}
-
-/** Kirim transaksi biasa dari wallet pengguna (butuh sedikit ETH gas). */
-export function SendTxButton({ to, data, chainId, label }: { to: string; data: string; chainId: number; label: string }) {
-  const router = useRouter();
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  return (
-    <span>
-      <button className="btn danger" disabled={busy} onClick={async () => {
-        setBusy(true); setMsg("");
-        try {
-          const account = await connect(chainId);
-          const hash = await window.ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to, data }] });
-          setMsg("✓ terkirim " + String(hash).slice(0, 12) + "… (tunggu konfirmasi lalu refresh)");
-          setTimeout(() => router.refresh(), 8000);
-        } catch (e: any) { setMsg("✗ " + (e?.message ?? String(e))); } finally { setBusy(false); }
-      }}>{busy ? "Menunggu wallet…" : label}</button>
-      {msg && <span className="muted" style={{ marginLeft: 10 }}>{msg}</span>}
-    </span>
-  );
+function Msg({ m }: { m: { text: string; err?: boolean } }) {
+  if (!m.text) return null;
+  return <div className={`msg ${m.err ? "err" : ""}`} role={m.err ? "alert" : "status"}>{m.text}</div>;
 }
 
 /**
- * Suara review di panel keputusan.
- * Setuju = SATU tanda tangan EIP-712 atas attestation (sekaligus suara dan tanda tangan attestation; tanpa gas).
- * Tolak = tanda tangan pesan berisi alasan. Server memeriksa wallet = Signer sesuai peran.
+ * Beli token: (1) pesanan dibuat, (2) investor menandatangani pesanan di wallet Privy (jumlah, nominal, batas waktu),
+ * (3) bayar di payment gateway, (4) platform mengeksekusi pesanan on-chain setelah rupiah masuk.
+ * `funding="balance"` = reinvest dari saldo: langkah 3 dilewati.
  */
-export function ReviewVoteButtons({ seriesId, email, role, chainId }: { seriesId: string; email: string; role: string; chainId: number }) {
+export function BuyBox({ seriesId, refPrice, available, balance, gateway }: { seriesId: string; refPrice: number; available: number; balance: number; gateway: "xendit" | "mock" }) {
   const router = useRouter();
-  const [note, setNote] = useState("");
-  const [msg, setMsg] = useState<{ text: string; err?: boolean }>({ text: "" });
-  const [busy, setBusy] = useState<"" | "approved" | "rejected">("");
-  async function vote(decision: "approved" | "rejected") {
-    setBusy(decision); setMsg({ text: "" });
+  const { sign, ready, status } = usePrivySign();
+  const [tokens, setTokens] = useState(10);
+  const [funding, setFunding] = useState<"payment" | "balance">("payment");
+  const [busy, setBusy] = useState("");
+  const [m, setM] = useState<{ text: string; err?: boolean }>({ text: "" });
+  const amount = tokens * refPrice;
+  const max = funding === "balance" ? Math.min(available, Math.floor(balance / refPrice)) : available;
+  async function buy() {
+    setM({ text: "" });
     try {
-      if (decision === "rejected" && note.trim().length < 10) throw new Error("Alasan penolakan minimal 10 karakter (owner akan membacanya)");
-      const account = await connect(chainId);
-      let signature: string; const payload: Record<string, unknown> = { seriesId, decision, note };
-      if (decision === "approved") {
-        const prep = await fetch(`/api/review?seriesId=${encodeURIComponent(seriesId)}`);
-        const pj = await prep.json();
-        if (!prep.ok) throw new Error(pj.error ?? "gagal menyiapkan attestation");
-        const allowed = (pj.allowed as string[]).map((a) => a.toLowerCase());
-        if (!allowed.includes(account.toLowerCase())) throw new Error(`Akun MetaMask aktif (${account.slice(0, 8)}…) bukan wallet ${role === "auditor" ? "Signer 3" : "Signer 1 atau 2"}. Ganti akun ke ${(pj.allowed as string[]).map((a) => a.slice(0, 8) + "…").join(" atau ")}.`);
-        signature = await window.ethereum.request({ method: "eth_signTypedData_v4", params: [account, pj.typed] });
-        if (pj.notice) setMsg({ text: pj.notice });
-      } else {
-        const at = new Date().toISOString();
-        payload.at = at;
-        signature = await window.ethereum.request({ method: "personal_sign", params: [reviewMessage({ seriesId, email, role, decision, note, at }), account] });
-      }
-      setMsg({ text: "Memproses… jika ini suara kedua, kontrak dideploy dan attestation dikirim ke Sepolia (bisa 15–40 detik)." });
-      const res = await fetch("/api/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...payload, signature }) });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "gagal");
-      setMsg({ text: j.message });
+      setBusy("Membuat pesanan…");
+      const o = await post("/api/orders", { seriesId, tokens, funding });
+      setBusy("Tanda tangani pesanan di wallet Anda…");
+      const signature = await sign(o.typed);
+      setBusy(funding === "balance" ? "Mengalokasikan token…" : "Menyiapkan halaman bayar…");
+      const r = await post(`/api/orders/${o.orderId}/sign`, { signature });
+      if (r.url) { window.location.href = r.url; return; }
+      setM({ text: `${tokens} token masuk ke wallet Anda (dibayar dari saldo).` });
       router.refresh();
-    } catch (e: any) { setMsg({ text: e?.message ?? String(e), err: true }); } finally { setBusy(""); }
+    } catch (e: any) { setM({ text: e?.message ?? String(e), err: true }); } finally { setBusy(""); }
   }
   return (
     <div className="stack" style={{ ["--gap" as any]: "12px" }}>
-      <label className="field">Catatan (wajib bila menolak)<input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="mis. nama di polis tidak cocok dengan badan usaha" /></label>
-      <button className="btn primary lg block" disabled={!!busy} onClick={() => vote("approved")}>{busy === "approved" ? "Menunggu MetaMask…" : "Setujui & tanda tangani"}</button>
-      <button className="btn block" disabled={!!busy} onClick={() => vote("rejected")}>{busy === "rejected" ? "Menunggu MetaMask…" : "Tolak pengajuan"}</button>
-      {msg.text && <div className={`msg ${msg.err ? "err" : ""}`} role={msg.err ? "alert" : "status"}>{msg.text}</div>}
+      <div className="seg" role="radiogroup" aria-label="Sumber dana">
+        <button type="button" className={funding === "payment" ? "on" : ""} aria-pressed={funding === "payment"} onClick={() => setFunding("payment")}>Bayar ({gateway === "xendit" ? "Xendit mode uji" : "sandbox"})</button>
+        <button type="button" className={funding === "balance" ? "on" : ""} aria-pressed={funding === "balance"} onClick={() => setFunding("balance")} disabled={balance < refPrice}>Reinvest dari saldo</button>
+      </div>
+      <label className="field">Jumlah token
+        <input className="input" type="number" min={1} max={max} value={tokens} onChange={(e) => setTokens(Math.max(1, Math.floor(Number(e.target.value) || 1)))} />
+      </label>
+      <div className="small">Dibayar: <b>{rp(amount)}</b> ({tokens.toLocaleString("id-ID")} × harga referensi {rp(refPrice)}). Ini harga yang dibayar, bukan penghasilan.</div>
+      <button className="btn primary lg block" disabled={!!busy || !ready || tokens < 1 || tokens > max} onClick={buy}>{busy || (ready ? "Tanda tangani pesanan & bayar" : status === "error" ? "Wallet bermasalah" : "Menyiapkan wallet…")}</button>
+      {tokens > max && <div className="small" style={{ color: "var(--bad)" }}>Maksimal {max.toLocaleString("id-ID")} token {funding === "balance" ? "dari saldo Anda" : "tersedia di treasury"}.</div>}
+      <Msg m={m} />
     </div>
   );
 }
 
-/** Hubungkan wallet (MetaMask) ke akun: menandatangani pesan bukti kepemilikan, tanpa gas. */
-export function ConnectWalletButton({ authId, chainId }: { authId: string; chainId: number }) {
+/** Ajukan jual balik: pemegang menandatangani permintaan (jumlah, nominal) di wallet Privy; dieksekusi pada jendela berikutnya bila dana ada. */
+export function SellBackBox({ seriesId, unlocked, price }: { seriesId: string; unlocked: number; price: number }) {
   const router = useRouter();
-  const [msg, setMsg] = useState("");
+  const { sign, ready } = usePrivySign();
+  const [tokens, setTokens] = useState(Math.min(10, unlocked));
   const [busy, setBusy] = useState(false);
-  return (
-    <span>
-      <button className="btn primary" disabled={busy} onClick={async () => {
-        setBusy(true); setMsg("");
-        try {
-          const address = await connect(chainId);
-          const message = `Hubungkan wallet ke OpenGrounds\nAkun: ${authId}\nWaktu: ${new Date().toISOString()}`;
-          const signature = await window.ethereum.request({ method: "personal_sign", params: [message, address] });
-          const res = await fetch("/api/wallet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address, message, signature }) });
-          const j = await res.json();
-          if (!res.ok) throw new Error(j.error ?? "gagal");
-          setMsg("✓ " + j.message);
-          router.refresh();
-        } catch (e: any) { setMsg("✗ " + (e?.message ?? String(e))); } finally { setBusy(false); }
-      }}>{busy ? "Menunggu wallet…" : "Hubungkan wallet (MetaMask)"}</button>
-      {msg && <span className="muted small" style={{ marginLeft: 10 }}>{msg}</span>}
-    </span>
-  );
-}
-
-/** Ajukan redeem: investor menandatangani RedeemRequest (EIP-712) di wallet-nya; platform meneruskan tanpa gas untuk investor. */
-/**
- * Redeem dua langkah: tampilkan dulu apa yang DILEPAS (perkiraan bagian ke depan), baru minta tanda tangan.
- * Angka ke depan hanya estimasi dari data omzet; ditampilkan sebagai rentang.
- */
-export function RedeemButton({ seriesId, series, holder, nonce, chainId, max, valuePerToken, futurePerToken }: {
-  seriesId: string; series: string; holder: string; nonce: string; chainId: number; max: number;
-  valuePerToken?: number; futurePerToken?: { low: number; high: number; monthsLeft: number };
-}) {
-  const router = useRouter();
-  const { signer } = useInvestorSigner();
-  const [units, setUnits] = useState(Math.min(100, max));
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
-  async function sign() {
-    setBusy(true); setMsg("");
+  const [m, setM] = useState<{ text: string; err?: boolean }>({ text: "" });
+  async function go() {
+    setBusy(true); setM({ text: "" });
     try {
-      const deadline = Math.floor(Date.now() / 1000) + 3600;
-      const typed = JSON.stringify({
-        types: {
-          EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }],
-          RedeemRequest: [{ name: "series", type: "address" }, { name: "holder", type: "address" }, { name: "units", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }],
-        },
-        primaryType: "RedeemRequest",
-        domain: { name: "Series", version: "1", chainId, verifyingContract: series },
-        message: { series, holder, units: String(units), nonce, deadline: String(deadline) },
-      });
-      const signature = await signAsHolder(signer, holder, chainId, typed);
-      const res = await fetch("/api/redeem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seriesId, units: String(units), deadline: String(deadline), signature }) });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "gagal");
-      setMsg("✓ " + j.message);
-      setConfirming(false);
+      const r = await post("/api/sellback", { seriesId, tokens });
+      const signature = await sign(r.typed);
+      const s = await post(`/api/sellback/${r.requestId}/sign`, { signature });
+      setM({ text: s.message });
       router.refresh();
-    } catch (e: any) { setMsg("✗ " + (e?.message ?? String(e))); } finally { setBusy(false); }
+    } catch (e: any) { setM({ text: e?.message ?? String(e), err: true }); } finally { setBusy(false); }
   }
+  if (unlocked < 1) return <p className="small muted">Belum ada token yang lewat masa kunci.</p>;
   return (
     <div className="stack" style={{ ["--gap" as any]: "10px" }}>
       <div className="row">
-        <input className="input sm" type="number" min={1} max={max} value={units} onChange={(e) => { setUnits(Number(e.target.value)); setConfirming(false); }} aria-label="Jumlah token yang ditebus" />
-        {!confirming && <button className="btn sm" disabled={busy || units < 1 || units > max} onClick={() => setConfirming(true)}>Tebus…</button>}
+        <input className="input sm" type="number" min={1} max={unlocked} value={tokens} onChange={(e) => setTokens(Math.max(1, Math.floor(Number(e.target.value) || 1)))} aria-label="Jumlah token dijual balik" />
+        <button className="btn sm" disabled={busy || !ready || tokens > unlocked} onClick={go}>{busy ? "Menunggu wallet…" : `Ajukan jual balik ${rp(tokens * price)}`}</button>
       </div>
-      {confirming && (
-        <div className="notice warn" role="alertdialog" aria-label="Konfirmasi tebus">
-          <div className="stack small" style={{ ["--gap" as any]: "8px" }}>
-            <b>Sebelum menebus {units.toLocaleString("id-ID")} token, ini yang terjadi:</b>
-            <div>Anda terima sekarang: <b>{valuePerToken !== undefined ? rp(valuePerToken * units) : "nilai tebus saat ini"}</b> (nilai tebus per token × jumlah, dibulatkan ke bawah).</div>
-            <div>Anda <b>melepas</b> bagian ke depan: {futurePerToken && futurePerToken.monthsLeft > 0 ? <>perkiraan <b>{rp(futurePerToken.low * units)}–{rp(futurePerToken.high * units)}</b> selama sisa tenor (paling lama ±{futurePerToken.monthsLeft} bulan; estimasi, bisa lebih kecil).</> : "semua bagian omzet berikutnya untuk token ini."}</div>
-            <div>Token dikunci, lalu dibakar setelah kustodian membayar. Tidak bisa dibatalkan setelah dibayar.</div>
-            <div className="row">
-              <button className="btn sm primary" disabled={busy} onClick={sign}>{busy ? "Menunggu wallet…" : "Saya paham, tanda tangani"}</button>
-              <button className="btn sm ghost" disabled={busy} onClick={() => setConfirming(false)}>Batal</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {msg && <span className="muted small">{msg}</span>}
-    </div>
-  );
-}
-
-export function TransferButton({ seriesId, series, holder, nonce, chainId, max }: { seriesId: string; series: string; holder: string; nonce: string; chainId: number; max: number }) {
-  const router = useRouter();
-  const { signer } = useInvestorSigner();
-  const [units, setUnits] = useState(1);
-  const [to, setTo] = useState("");
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="stack" style={{ ["--gap" as any]: "8px" }}>
-      <input className="input sm mono" placeholder="Alamat wallet penerima (0x…)" value={to} onChange={(e) => setTo(e.target.value.trim())} aria-label="Alamat wallet penerima" />
-      <div className="row">
-        <input className="input sm" type="number" min={1} max={max} value={units} onChange={(e) => setUnits(Number(e.target.value))} aria-label="Jumlah token yang dikirim" />
-        <button className="btn sm" disabled={busy || units < 1 || units > max || !/^0x[0-9a-fA-F]{40}$/.test(to)} onClick={async () => {
-          setBusy(true); setMsg("");
-          try {
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const typed = JSON.stringify({
-              types: {
-                EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }],
-                TransferRequest: [{ name: "series", type: "address" }, { name: "from", type: "address" }, { name: "to", type: "address" }, { name: "units", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }],
-              },
-              primaryType: "TransferRequest",
-              domain: { name: "Series", version: "1", chainId, verifyingContract: series },
-              message: { series, from: holder, to, units: String(units), nonce, deadline: String(deadline) },
-            });
-            const signature = await signAsHolder(signer, holder, chainId, typed);
-            const res = await fetch("/api/transfer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seriesId, to, units: String(units), deadline: String(deadline), signature }) });
-            const j = await res.json();
-            if (!res.ok) throw new Error(j.error ?? "gagal");
-            setMsg("✓ " + j.message);
-            router.refresh();
-          } catch (e: any) { setMsg("✗ " + (e?.message ?? String(e))); } finally { setBusy(false); }
-        }}>{busy ? "Menunggu wallet…" : "Kirim token"}</button>
-      </div>
-      {msg && <span className="muted small">{msg}</span>}
+      <p className="small muted">Likuiditas tidak dijamin. Jual balik bergantung pada dana cadangan dan keputusan Grounds; antrean FIFO per jendela.</p>
+      <Msg m={m} />
     </div>
   );
 }
 
 /**
- * Status wallet investor. Dengan Privy: wallet dibuat dan ditautkan otomatis (tanpa klik); tanpa Privy: tombol MetaMask.
+ * Tanda tangan attestation (EIP-712, tanpa gas). Owner memakai wallet Privy; verifier (reviewer independen) memakai MetaMask.
+ * Server mengenali slot dari alamat penanda tangan; kontrak memeriksa ulang.
  */
-export function WalletStatus({ authId, chainId }: { authId: string; chainId: number }) {
+export function AttestSignButton({ attId, label, via, chainId, confirmText }: { attId: string; label: string; via: "privy" | "metamask"; chainId: number; confirmText?: string }) {
+  const router = useRouter();
+  const privy = usePrivySign();
+  const [busy, setBusy] = useState(false);
+  const [m, setM] = useState<{ text: string; err?: boolean }>({ text: "" });
+  async function go() {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true); setM({ text: "" });
+    try {
+      const res = await fetch(`/api/attest/${attId}`);
+      const j = await res.json();
+      if (!res.ok || j.error) throw new Error(j.error ?? "gagal memuat attestation");
+      const signature = via === "privy" ? await privy.sign(j.typed) : await metamaskSign(j.typed, chainId);
+      setM({ text: "Memproses… bila tanda tangan sudah lengkap, transaksi dikirim ke Sepolia (15–40 detik)." });
+      const r = await post(`/api/attest/${attId}`, { signature });
+      setM({ text: r.message });
+      router.refresh();
+    } catch (e: any) { setM({ text: e?.message ?? String(e), err: true }); } finally { setBusy(false); }
+  }
+  return (
+    <div className="stack" style={{ ["--gap" as any]: "8px" }}>
+      <button className="btn primary" disabled={busy || (via === "privy" && !privy.ready)} onClick={go}>{busy ? "Menunggu wallet…" : via === "privy" && !privy.ready ? "Menyiapkan wallet…" : label}</button>
+      <Msg m={m} />
+    </div>
+  );
+}
+
+/** Status wallet Privy (dibuat dan ditautkan otomatis). */
+export function WalletStatus() {
   const { enabled, status, error, retry } = useInvestorSigner();
-  if (!enabled) return <ConnectWalletButton authId={authId} chainId={chainId} />;
+  if (!enabled) return <span className="small" style={{ color: "var(--bad)" }}>Privy belum dikonfigurasi (NEXT_PUBLIC_PRIVY_APP_ID).</span>;
   if (status === "error") return <div className="stack" style={{ ["--gap" as any]: "8px" }}><span className="small" style={{ color: "var(--bad)" }}>{error ?? "Wallet belum bisa dibuat."}</span><div><button className="btn sm" onClick={retry}>Coba lagi</button></div></div>;
   return <span className="small muted" role="status">{status === "linking" ? "Menautkan wallet ke akun Anda…" : "Wallet Anda sedang dibuat otomatis (kuncinya disimpan Privy)…"}</span>;
 }

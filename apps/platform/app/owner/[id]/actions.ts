@@ -1,29 +1,35 @@
 "use server";
 import { requireOwner } from "@/lib/auth";
+import { guarded } from "@/lib/flow";
+import { latestCase, resubmitCase } from "@/lib/flows/kyb";
+import { ownerOfVenue } from "@/lib/flows/onboarding";
+import { disputePeriod, submitExpense, syncTopup } from "@/lib/flows/periods";
 import { platformDb } from "@/lib/db";
-import { getCtx, guarded } from "@/lib/flow";
-import { currentSeriesOf } from "@/lib/flows/reprice";
-import { ownerWithdraw } from "@/lib/flows/series";
 
-/** Owner menarik dana yang sudah dirilis ke saldo owner (kustodian simulasi). Hanya untuk pengajuannya sendiri. */
-export async function withdraw(fd: FormData) {
-  const id = String(fd.get("id"));
-  return guarded(`/owner/${id}`, async () => {
-    const me = await requireOwner(`/owner/${id}`);
-    const { data: venue } = await platformDb().from("venues").select("owner_id").eq("id", id).maybeSingle();
-    if (!venue || venue.owner_id !== me.userId) throw new Error("Pengajuan tidak ditemukan");
-    const ctx = await getCtx((await currentSeriesOf(id)).id);
-    return ownerWithdraw(ctx, me.userId, Number(String(fd.get("amount") ?? "").replace(/\D/g, "")));
-  });
+async function mine(venueId: string) {
+  const me = await requireOwner();
+  if ((await ownerOfVenue(venueId)) !== me.userId) throw new Error("Bukan venue Anda");
+  return me;
 }
+const back = (id: string) => `/owner/${id}`;
 
-const num = (v: FormDataEntryValue | null) => Number(String(v ?? "").replace(/\D/g, ""));
-
-/** Syarat penawaran dikunci sejak pengajuan: perubahan harga, target, atau minimum tidak diterima. */
-export async function reprice(fd: FormData) {
-  const id = String(fd.get("id"));
-  return guarded(`/owner/${id}`, async () => {
-    await requireOwner(`/owner/${id}`);
-    throw new Error("Syarat penawaran (jumlah token, harga, persen omzet, tenor, minimum) dikunci sejak pengajuan dan tidak bisa diubah.");
-  });
+export async function resubmitAction(fd: FormData) {
+  const id = String(fd.get("venueId"));
+  await guarded(back(id), async () => { const me = await mine(id); const kc = await latestCase(id); await resubmitCase(kc!.id, me.email); return "Dikirim ulang untuk diperiksa."; });
+}
+export async function expenseAction(fd: FormData) {
+  const id = String(fd.get("venueId")), seriesId = String(fd.get("seriesId"));
+  await guarded(back(id), async () => { const me = await mine(id); return submitExpense(seriesId, me.email, { category: String(fd.get("category")), amount: Math.floor(Number(fd.get("amount"))), note: String(fd.get("note") ?? "") }); });
+}
+export async function disputeAction(fd: FormData) {
+  const id = String(fd.get("venueId"));
+  await guarded(back(id), async () => { const me = await mine(id); return disputePeriod(String(fd.get("seriesId")), Number(fd.get("periodNo")), me.email, String(fd.get("reason") ?? "")); });
+}
+export async function topupSyncAction(fd: FormData) {
+  const id = String(fd.get("venueId"));
+  await guarded(back(id), async () => { await mine(id); const r = await syncTopup(String(fd.get("seriesId")), Number(fd.get("periodNo"))); return r === "paid" ? "Kekurangan diterima; jatah investor dikreditkan." : `Pembayaran belum diterima (${r}).`; });
+}
+export async function removeExpenseAction(fd: FormData) {
+  const id = String(fd.get("venueId"));
+  await guarded(back(id), async () => { await mine(id); await platformDb().from("expense_items").delete().eq("id", String(fd.get("id"))).eq("status", "pending"); return "Biaya dihapus."; });
 }

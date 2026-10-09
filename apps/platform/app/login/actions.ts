@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { getMe } from "@/lib/auth";
 import { userClient } from "@/lib/supabase";
 
-/** Halaman awal setelah login menurut peran: auditor langsung ke review, operator ke konsol operator. */
-const homeFor = (role: string) => (role === "owner" ? "/owner" : role === "investor" ? "/portfolio" : role === "auditor" ? "/reviewer" : "/operator");
+/** Halaman awal setelah login menurut peran: reviewer ke antrean review, SPV ke halaman SPV, operator ke konsol operator. */
+const homeFor = (role: string) => (role === "owner" ? "/owner" : role === "investor" ? "/portfolio" : role === "reviewer" ? "/review" : role === "spv" ? "/spv" : "/operator");
 
 /** Hanya path internal. Tolak "//host", "/\\host" (browser menganggap backslash = slash), dan karakter kontrol; lalu pastikan tetap satu origin. */
 const safeNext = (n: string) => {

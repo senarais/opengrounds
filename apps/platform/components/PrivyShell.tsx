@@ -8,14 +8,14 @@ import { SignerCtx, type InvestorSigner, type SignerState } from "./signer-conte
 const linkMessage = (authId: string) => `Hubungkan wallet ke OpenGrounds\nAkun: ${authId}\nWaktu: ${new Date().toISOString()}`;
 
 /**
- * Wallet investor dibuat otomatis oleh Privy (custom auth: login Supabase kita ditukar jadi wallet milik pengguna itu).
+ * Wallet investor dan owner dibuat otomatis oleh Privy (custom auth: login Supabase kita ditukar jadi wallet milik pengguna itu).
  * Kunci disimpan Privy, bukan platform. Alamatnya dibuktikan ke server dengan menandatangani pesan yang sama seperti penautan MetaMask,
- * jadi server tidak perlu memercayai klien. Tanpa NEXT_PUBLIC_PRIVY_APP_ID komponen ini tidak melakukan apa-apa (jalur MetaMask tetap ada).
+ * jadi server tidak perlu memercayai klien. Tanpa NEXT_PUBLIC_PRIVY_APP_ID komponen ini tidak melakukan apa-apa.
  */
-export function PrivyShell({ appId, investor, authId, linked, chainId, children }: { appId?: string; investor: boolean; authId?: string; linked: boolean; chainId: number; children: React.ReactNode }) {
+export function PrivyShell({ appId, enabled, authId, linked, chainId, children }: { appId?: string; enabled: boolean; authId?: string; linked: boolean; chainId: number; children: React.ReactNode }) {
   // "Coba lagi" me-mount ulang Bridge, sehingga sinkronisasi login ke Privy diulang dari awal
   const [round, setRound] = useState(0);
-  if (!appId || !investor || !authId) return <>{children}</>;
+  if (!appId || !enabled || !authId) return <>{children}</>;
   return (
     <PrivyProvider appId={appId} config={{
       embeddedWallets: { ethereum: { createOnLogin: "all-users" }, showWalletUIs: false },

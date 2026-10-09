@@ -430,3 +430,30 @@ a.chip.free:hover { border-color: var(--accent); background: var(--accent-soft);
 .vchart figcaption { margin-bottom: 6px; }
 .vchart-wrap { position: relative; }
 .vchart-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: var(--shadow); pointer-events: none; white-space: nowrap; }
+
+/* ---------- v4.1: pilihan segmen, waterfall, lot, slot tanda tangan ---------- */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.seg button { font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 12px; border-radius: 9px; border: 0; background: transparent; color: var(--text-2); cursor: pointer; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--toy); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.msg { font-size: 13.5px; padding: 9px 12px; border-radius: 10px; background: var(--info-bg); color: var(--info); }
+.msg.err { background: var(--bad-bg); color: var(--bad); }
+.wf { display: grid; gap: 2px; font-variant-numeric: tabular-nums; }
+.wf-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.wf-row.minus span:first-child { color: var(--text-2); }
+.wf-row.total { border-bottom: 0; border-top: 2px solid var(--midnight); font-weight: 700; padding-top: 8px; }
+.wf-row.share { color: var(--peach-ink); font-weight: 600; border-bottom: 0; }
+.slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.slot { border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 12px; font-size: 13px; background: var(--surface); }
+.slot b { display: block; font-size: 13.5px; }
+.slot.signed { border-color: var(--ok); background: var(--ok-bg); }
+.slot.na { opacity: .5; border-style: dashed; }
+.lots { display: grid; gap: 6px; }
+.lot { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; font-size: 13.5px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.lot .lock { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--highlight-soft); color: var(--butter-ink); }
+.lot .lock.open { background: var(--ok-bg); color: var(--ok); }
+.cheat { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.cheat .verdict { grid-row: span 3; align-self: start; font-weight: 800; font-size: 12px; padding: 3px 9px; border-radius: 99px; }
+.cheat .verdict.blocked { background: var(--ok-bg); color: var(--ok); }
+.cheat .verdict.passed { background: var(--bad-bg); color: var(--bad); }
+.cheat code { font-size: 12.5px; color: var(--bad); }

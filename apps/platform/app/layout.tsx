@@ -12,8 +12,8 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const display = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-display", weight: ["600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "OpenGrounds · Bagi hasil omzet venue olahraga",
-  description: "Investor kecil ikut membiayai venue olahraga dan menerima bagian dari omzet yang dibuktikan data payment gateway. Demo testnet, bukan produk disetujui OJK.",
+  title: "Open Grounds · Hak manfaat ekonomi venue olahraga",
+  description: "Investor kecil memiliki token hak manfaat atas bagian laba bersih venue olahraga yang tanahnya milik sendiri. Demo testnet; Open Grounds belum memiliki izin regulator.",
 };
 
 const POS_URL = process.env.POS_URL ?? "http://localhost:3001";
@@ -25,26 +25,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <header className="topbar">
           <div className="in">
-            <Logo name="OpenGrounds" sub="Bagi hasil omzet venue" />
+            <Logo name="Open Grounds" sub="Hak manfaat venue olahraga" />
             <nav className="topnav" aria-label="Navigasi utama">
-              <NavLink href="/offering">Penawaran</NavLink>
+              <NavLink href="/products">Produk</NavLink>
               {(!me || me.role === "investor") && <NavLink href="/portfolio">Portofolio</NavLink>}
-              {(!me || me.role === "owner") && <NavLink href="/owner">Untuk owner</NavLink>}
-              {canOpen(me, "operator") && (<>
+              {(!me || me.role === "owner") && <NavLink href="/owner">{me ? "Venue saya" : "Untuk owner"}</NavLink>}
+              {canOpen(me, "review") && (<>
                 <span className="sep" aria-hidden />
+                <NavLink href="/review">Review KYB</NavLink>
+              </>)}
+              {canOpen(me, "operator") && (<>
                 <NavLink href="/operator">Operator</NavLink>
-                <NavLink href="/reviewer">Review</NavLink>
-                <NavLink href="/verification">Verifikasi</NavLink>
                 <NavLink href="/staff">Staf</NavLink>
               </>)}
-              {me?.role === "auditor" && (<>
-                <span className="sep" aria-hidden />
-                <NavLink href="/reviewer">Review</NavLink>
-                <NavLink href="/auditor">Auditor</NavLink>
-                <NavLink href="/verification">Verifikasi</NavLink>
-              </>)}
+              {canOpen(me, "verifier") && <NavLink href="/verifier">Verifier</NavLink>}
+              {canOpen(me, "spv") && <NavLink href="/spv">Grounds (SPV)</NavLink>}
             </nav>
-            <span className="testnet-chip" title="Jaringan uji Sepolia. Rupiah dan kustodian disimulasikan; bukan produk disetujui OJK.">Testnet · simulasi</span>
+            <span className="testnet-chip" title="Testnet/simulasi. Tidak ada uang sungguhan. Open Grounds belum memiliki izin atau persetujuan regulator.">Testnet · simulasi</span>
             {me ? (
               <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
                 <span className="small muted" style={{ whiteSpace: "nowrap" }}>{me.name}</span>
@@ -59,10 +56,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {me?.role === "owner" && <a className="btn sm dark" href={POS_URL} target="_blank" rel="noreferrer">PoS ↗</a>}
           </div>
         </header>
-        <PrivyShell appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} investor={me?.role === "investor"} authId={me?.authId} linked={!!me?.wallet} chainId={chain.id}>{children}</PrivyShell>
+        <PrivyShell appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} enabled={me?.role === "investor" || me?.role === "owner"} authId={me?.authId} linked={!!me?.wallet} chainId={chain.id}>{children}</PrivyShell>
         <footer className="footer">
-          OpenGrounds · proyek hackathon ETHJKT 2026 (track RWA) · Testnet Sepolia, tanpa uang riil dan tanpa penawaran publik.
-          Tidak mengklaim disetujui OJK. Bukan nasihat hukum atau investasi. <a href="/kebijakan-data" style={{ textDecoration: "underline" }}>Kebijakan data</a>
+          Open Grounds · proyek hackathon ETHJKT 2026 (track RWA) · Testnet/simulasi: tidak ada uang sungguhan. Open Grounds belum memiliki izin atau persetujuan regulator untuk menawarkan produk ini.
+          Imbal hasil dan likuiditas tidak dijamin. Bukan nasihat hukum atau investasi. <a href="/kebijakan-data" style={{ textDecoration: "underline" }}>Kebijakan data</a> · <a href="/cara-kerja" style={{ textDecoration: "underline" }}>Cara kerja & rumus</a>
         </footer>
       </body>
     </html>

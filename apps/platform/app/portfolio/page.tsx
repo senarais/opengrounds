@@ -1,200 +1,137 @@
 import Link from "next/link";
-import { getAddress } from "viem";
+import { getAddress, type Address } from "viem";
 import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader } from "@venue-rwa/ui";
+import { SellBackBox, WalletStatus } from "@/components/Wallet";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import { PoolJar } from "@/components/visual/PoolJar";
-import { RedeemButton, TransferButton, WalletStatus } from "@/components/Wallet";
-import { chain, publicClient, readSeries, seriesAbi, tokenAbi } from "@/lib/chain";
+import { Statements } from "@/components/Statements";
 import { requireInvestor } from "@/lib/auth";
-import { platformDb } from "@/lib/db";
-import { isKycVerified } from "@/lib/flows/investor";
-import { pct, rp, short } from "@/lib/format";
-import { listOfferings } from "@/lib/offering";
+import { readHolder, readSeries, etherscanTx } from "@/lib/chain";
 import { diditConfig } from "@/lib/didit";
-import { latestKyc, syncKyc } from "@/lib/flows/kyc";
-import { settleWalletPurchases } from "@/lib/flows/payment";
-import { xenditConfigured, xenditTestMode } from "@/lib/psp";
-import { kyc, refund, startDidit } from "./actions";
+import { platformDb } from "@/lib/db";
+import { balanceOf, ledgerOf, WITHDRAW_STATUS_LABEL, withdrawalsOf } from "@/lib/flows/cash";
+import { activeBankAccount, kycOf, syncDiditKyc } from "@/lib/flows/investor";
+import { ORDER_STATUS_LABEL, syncOrders } from "@/lib/flows/orders";
+import { SELLBACK_STATUS_LABEL } from "@/lib/flows/sellback";
+import { date, dt, rp } from "@/lib/format";
+import { cancelOrderAction, cancelSellBackAction, mockKycAction, saveBankAction, startKycAction, withdrawAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-const STATE_ID: Record<string, [string, "ok" | "warn" | "bad" | "neutral" | "info"]> = {
-  Draft: ["Belum dibuka", "neutral"], Offering: ["Penawaran dibuka", "info"], Funded: ["Terdanai", "ok"], Active: ["Aktif", "ok"], Closed: ["Selesai", "neutral"], Failed: ["Gagal, refund", "bad"],
-};
+export const metadata = { title: "Portofolio" };
 
-export default async function Portfolio({ searchParams }: { searchParams: Promise<{ kyc?: string; s?: string; ok?: string; err?: string; pay?: string }> }) {
+export default async function Portfolio({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; kyc?: string }> }) {
   const sp = await searchParams;
   const me = await requireInvestor();
+  if (sp.kyc === "return") await syncDiditKyc(me.userId).catch(() => null);
+  const syncErrs = await syncOrders(me.userId).catch(() => []);
   const pf = platformDb();
-  const wallet = me.wallet ? getAddress(me.wallet) : null;
-  const didit = diditConfig().configured;
-  if (didit && sp.kyc === "return") await syncKyc(me.userId).catch(() => null);
-  const lastKyc = didit ? await latestKyc(me.userId) : null;
-  const kycOk = wallet ? await isKycVerified(wallet) : false;
-  // pembayaran lewat payment gateway: selesaikan yang sudah dibayar (mint token) dan tampilkan yang masih menunggu
-  const settled = wallet && xenditConfigured() ? await settleWalletPurchases(wallet).catch((e) => ({ ok: undefined, err: String(e?.message ?? e) })) : null;
-  const { data: waiting } = wallet && xenditConfigured() ? await pf.from("purchases").select("id, units, amount, psp_url, status, expires_at, note, series_id").eq("wallet", wallet).in("status", ["pending", "paid", "mint_failed"]).order("created_at", { ascending: false }) : { data: [] as any[] };
-  const offerings = await listOfferings();
-
-  // posisi di setiap seri
-  const rows = wallet ? await Promise.all(offerings.filter((o) => o.s).map(async ({ series, venue, s }) => {
-    const ref = { series: series.contract_address, token: series.token_address };
-    const [bal, locked, nonce, tnonce] = await Promise.all([
-      publicClient.readContract({ address: ref.token, abi: tokenAbi, functionName: "balanceOf", args: [wallet] }) as Promise<bigint>,
-      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "pendingUnits", args: [wallet] }) as Promise<bigint>,
-      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "redeemNonce", args: [wallet] }) as Promise<bigint>,
-      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "transferNonce", args: [wallet] }) as Promise<bigint>,
-    ]);
-    const { data: ps } = await pf.from("purchases").select("amount, refunded_at").eq("series_id", series.id).eq("wallet", wallet).eq("status", "minted");
-    const paid = (ps ?? []).reduce((a, p) => a + Number(p.amount), 0);
-    const refunded = (ps ?? []).length > 0 && (ps ?? []).every((p) => p.refunded_at);
-    const info = s!;
-    const per = info.S > 0n ? Number((info.P - info.R) / info.S) : 0;
-    return { series, venue, info, bal, locked, nonce, tnonce, paid, per, ref, refunded };
+  const [kyc, bank, balance, ledger, wds] = await Promise.all([kycOf(me.userId), activeBankAccount(me.userId), balanceOf(me.userId), ledgerOf(me.userId, 12), withdrawalsOf(me.userId)]);
+  const { data: orders } = await pf.from("orders").select("*, series(symbol, venue_id)").eq("user_id", me.userId).order("created_at", { ascending: false }).limit(15);
+  const { data: sbs } = await pf.from("sellback_requests").select("*").eq("user_id", me.userId).order("created_at", { ascending: false }).limit(10);
+  const { data: allocated } = await pf.from("orders").select("series_id").eq("user_id", me.userId).eq("status", "ALLOCATED");
+  const seriesIds = [...new Set((allocated ?? []).map((o) => o.series_id))];
+  const { data: seriesRows } = seriesIds.length ? await pf.from("series").select("*, venues(name)").in("id", seriesIds) : { data: [] as any[] };
+  const holdings = me.wallet ? await Promise.all((seriesRows ?? []).map(async (s: any) => {
+    const addr = s.contract_address as Address;
+    const info = await readSeries(addr);
+    const h = await readHolder(addr, info.token, getAddress(me.wallet!));
+    return { s, info, h };
   })) : [];
-  const held = rows.filter((r) => r.bal > 0n || r.paid > 0);
-  // perkiraan bagian ke depan per token per bulan (dari omzet yang tercatat di halaman penawaran; konservatif = setelah haircut)
-  const { data: vds } = held.length ? await pf.from("venues").select("id, disclosure, data_source").in("id", held.map((r) => r.venue.id)) : { data: [] as any[] };
-  const future = (r: (typeof held)[number]) => {
-    const v = (vds ?? []).find((x) => x.id === r.venue.id);
-    const months: number[] = [...(v?.disclosure?.public?.performance?.months ?? [])].sort((a: number, b: number) => a - b);
-    const med = months.length ? months[Math.floor(months.length / 2)]! : 0;
-    const supply = Number(r.info.cap) || 1;
-    const high = (med * r.series.share_bps) / 10_000 / supply;
-    const haircut = v?.data_source === "self_reported" ? 0.35 : 0.2;
-    const monthsLeft = Math.round(r.series.tenor_days / 30);
-    return { low: high * (1 - haircut) * monthsLeft, high: high * monthsLeft, monthsLeft };
-  };
-  const totalPaid = held.reduce((a, r) => a + r.paid, 0);
-  const totalValue = held.reduce((a, r) => a + Number(r.bal) * r.per, 0);
+  const kycOk = kyc?.status === "verified";
+  const live = diditConfig().configured;
+  const bankOk = bank?.status === "verified";
+  const canSignOut = true;
 
   return (
     <div className="container">
-      <PageHeader eyebrow="Investor" title="Portofolio" lead="Token tidak punya harga pasar. Yang ditampilkan adalah apa yang Anda bayar dan nilai tebus saat ini (estimasi). Harga beli tidak sama dengan nilai tebus." />
-      <Flash ok={settled?.ok ?? sp.ok} err={settled?.err ?? sp.err} />
-      {(waiting ?? []).length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <Card title="Pembayaran menunggu" subtitle={`Token masuk ke wallet setelah payment gateway mengonfirmasi pembayaran.${xenditTestMode() ? " Xendit dalam mode uji: bayar lewat tombol simulasi di halaman Xendit, tidak ada uang sungguhan." : ""}`}>
-            <table className="table"><tbody>{(waiting ?? []).map((w: any) => (
-              <tr key={w.id}>
-                <td><b>{Number(w.units).toLocaleString("id-ID")} token</b><div className="small muted">{rp(w.amount)}{w.note ? ` · ${w.note}` : ""}</div></td>
-                <td>{w.status === "pending" ? <Badge tone="warn">menunggu bayar</Badge> : w.status === "paid" ? <Badge tone="info">memproses token</Badge> : <Badge tone="bad">token gagal di-mint</Badge>}</td>
-                <td className="r">{w.status === "pending" && w.psp_url && <a className="btn sm primary" href={w.psp_url}>Lanjut bayar</a>} <Link className="btn sm" href="/portfolio">Cek status</Link></td>
-              </tr>
-            ))}</tbody></table>
-          </Card>
-        </div>
-      )}
-      {(waiting ?? []).some((w: any) => w.status === "pending" || w.status === "paid") && <AutoRefresh seconds={10} />}
-      {held.length > 0 && <AutoRefresh seconds={20} />}
+      <AutoRefresh seconds={15} />
+      <PageHeader eyebrow="Investor" title="Portofolio" lead="Token Anda, saldo hasil jatah, dan status pesanan." />
+      <Flash ok={sp.ok} err={sp.err} />
+      {syncErrs.length > 0 && <Notice tone="warn" title="Sebagian pesanan belum selesai diproses:">{syncErrs[0]}</Notice>}
 
-      <div className="grid c2">
-        <Card title="1 · Wallet" subtitle="Token di-mint ke wallet Anda sendiri; tidak ada transaksi kripto di sisi investor selain tanda tangan.">
-          {wallet ? <div className="row between"><span className="mono">{short(wallet)}</span><Badge tone="ok">terhubung</Badge></div> : <WalletStatus authId={me.authId} chainId={chain.id} />}
+      <div className="grid c3">
+        <Card title="1. Wallet" subtitle="Dibuat otomatis, kuncinya disimpan Privy">
+          {me.wallet ? <><span className="mono small">{me.wallet}</span><div className="small muted">Tanpa biaya gas untuk Anda. Platform yang mengirim transaksi.</div></> : <WalletStatus />}
         </Card>
-        {didit ? (
-          <Card title="2 · KYC" subtitle="Verifikasi identitas oleh Didit. Platform hanya menyimpan status terikat wallet, bukan KTP/selfie.">
-            {!wallet ? <p className="muted small">Hubungkan wallet dulu.</p> : kycOk ? <Badge tone="ok">KYC terverifikasi</Badge> : (
-              <div className="stack" style={{ ["--gap" as any]: "8px" }}>
-                {lastKyc?.state === "review" && <Notice tone="warn">Verifikasi sedang ditinjau.</Notice>}
-                {lastKyc?.state === "rejected" && <Notice tone="warn">Verifikasi ditolak. Anda bisa mencoba lagi.</Notice>}
-                {lastKyc?.state === "pending" && <p className="small muted">Sesi belum selesai. Lanjutkan di Didit.</p>}
-                <form action={startDidit}><button className="btn primary">{lastKyc ? "Mulai ulang verifikasi (Didit)" : "Mulai verifikasi (Didit)"}</button></form>
-                {lastKyc && <Link className="btn sm" href="/portfolio?kyc=return">Periksa status</Link>}
-              </div>
-            )}
-          </Card>
-        ) : (
-        <Card title="2 · KYC (mock)" subtitle="Simulasi dan dilabeli. Platform hanya menyimpan status terikat wallet, bukan KTP/selfie.">
-          {!wallet ? <p className="muted small">Hubungkan wallet dulu.</p> : kycOk ? <Badge tone="ok">KYC (mock) lolos</Badge> : (
-            <form action={kyc}><input type="hidden" name="back" value="/portfolio" /><button className="btn primary">Verifikasi KYC (mock)</button></form>
+        <Card title="2. KYC" subtitle={live ? "Didit" : "Mock berlabel sandbox (Didit belum dikonfigurasi)"}>
+          {kycOk ? <Badge tone="ok">Terverifikasi{kyc?.provider === "mock" ? " (mock)" : ""}</Badge> : kyc?.status === "rejected" ? <Badge tone="bad">Ditolak</Badge> : live ? (
+            <form action={startKycAction}><button className="btn primary" disabled={!me.wallet}>Mulai verifikasi identitas</button><p className="small muted" style={{ marginTop: 6 }}>KTP dan selfie diproses Didit; platform hanya menerima status dan nama.</p></form>
+          ) : (
+            <form action={mockKycAction} className="stack" style={{ ["--gap" as any]: "8px" }}>
+              <label className="field">Nama lengkap sesuai KTP<input className="input" name="name" required minLength={3} defaultValue={me.name} /></label>
+              <button className="btn primary" disabled={!me.wallet}>Verifikasi (mock)</button>
+              <p className="small muted">Ini simulasi. Tidak ada identitas yang diperiksa.</p>
+            </form>
           )}
         </Card>
-        )}
+        <Card title="3. Rekening bank" subtitle="Atas nama sendiri; nama harus sama dengan KYC">
+          {bank ? <div className="small"><b>{bank.bank}</b> {bank.account_masked}<div className="muted">a.n. {bank.holder_name}</div>{bank.status === "cooling_off" && <Badge tone="warn">Masa tunggu sampai {dt(bank.cooling_until)}</Badge>}</div> : null}
+          {kycOk ? (
+            <details style={{ marginTop: 8 }} open={!bank}><summary className="small" style={{ cursor: "pointer", fontWeight: 600 }}>{bank ? "Ganti rekening (tunggu 48 jam)" : "Daftarkan rekening"}</summary>
+              <form action={saveBankAction} className="stack" style={{ ["--gap" as any]: "8px", marginTop: 8 }}>
+                <input className="input" name="bank" placeholder="Bank (mis. BCA)" required />
+                <input className="input" name="number" placeholder="Nomor rekening" required inputMode="numeric" />
+                <input className="input" name="holder" placeholder="Nama pemilik rekening" required />
+                <button className="btn">Simpan</button>
+                <p className="small muted">Pencocokan nama otomatis adalah mock; layanan cek nama bank belum terverifikasi.</p>
+              </form>
+            </details>
+          ) : <p className="small muted">Selesaikan KYC dulu.</p>}
+        </Card>
       </div>
 
-      {wallet && (
-        <>
-          <div className="grid c4 mt">
-            <Kpi label="Total dibayar" value={rp(totalPaid)} hint={xenditConfigured() ? `lewat Xendit${xenditTestMode() ? " (mode uji, bukan uang sungguhan)" : ""}` : "rupiah simulasi"} />
-            <Kpi label="Nilai tebus (final)" value={rp(totalValue)} hint="estimasi" accent />
-            <Kpi label="Seri dimiliki" value={held.length} />
+      <div className="grid c3 mt">
+        <Kpi label="Saldo (hasil jatah)" value={rp(balance)} hint="milik Anda, di rekening distribusi (simulasi)" accent />
+        <Kpi label="Token dimiliki" value={holdings.reduce((a, x) => a + Number(x.h.balance), 0).toLocaleString("id-ID")} />
+        <Kpi label="Jatah kumulatif" value={rp(holdings.reduce((a, x) => a + Number(x.h.claimable), 0))} hint="hitungan kontrak, termasuk yang belum dikreditkan" />
+      </div>
+
+      <div className="section-title mt"><h2>Token saya</h2><Link className="small" href="/products">Cari produk</Link></div>
+      {holdings.length === 0 ? <Empty>Belum ada token. <Link href="/products" style={{ fontWeight: 700 }}>Lihat produk</Link></Empty> : holdings.map(({ s, info, h }) => (
+        <Card key={s.id} title={<><Link href={`/products/${s.id}`}>{s.venues?.name}</Link> · {s.symbol}</>} subtitle={`${info.state} · harga referensi ${rp(Number(info.refPriceIdr))}`}>
+          <div className="grid c2">
+            <div>
+              <div className="big-amount">{Number(h.balance).toLocaleString("id-ID")} <span className="small muted">token ({(Number(h.balance) / Number(info.supply) * 100).toFixed(2)}% dari supply)</span></div>
+              <div className="small muted">Dibayar (harga referensi saat ini): {rp(Number(h.balance) * Number(info.refPriceIdr))}. Nilai tebus dan harga pasar tidak dijanjikan.</div>
+              <div className="lots" style={{ marginTop: 10 }}>{h.lots.map((l, i) => {
+                const open = l.unlockAt * 1000 <= Date.now();
+                return <div className="lot" key={i}><b>{Number(l.amount).toLocaleString("id-ID")}</b><span className="small muted">{open ? "bisa dijual balik" : `terbuka ${dt(new Date(l.unlockAt * 1000).toISOString())}`}</span><span className={`lock ${open ? "open" : ""}`}>{open ? "terbuka" : "terkunci"}</span></div>;
+              })}</div>
+            </div>
+            <div>
+              <h3>Jual balik ke treasury</h3>
+              {info.state === "Active" ? <SellBackBox seriesId={s.id} unlocked={Number(h.unlocked)} price={Number(info.refPriceIdr) * (10_000 - info.params.sellbackDiscountBps) / 10_000} /> : <p className="small muted">Tidak tersedia saat seri {info.state}.</p>}
+            </div>
           </div>
-          <div className="mt"><Notice tone="warn" title="Ingat:">Tebus awal berarti kehilangan bagian masa depan. Nilai tebus mulai dari sekitar Rp0 dan hanya tumbuh seiring omzet terbukti.</Notice></div>
+        </Card>
+      ))}
 
-          {held.length > 0 && (
-            <div className="mt">
-              <Card title="Token saya" subtitle="Semua token yang Anda pegang. Nilai tebus = bagian kantong investor per token × jumlah token (estimasi, bukan harga pasar).">
-                <div className="table-wrap"><table className="table">
-                  <thead><tr><th>Penawaran</th><th className="r">Token</th><th>Status</th><th className="r">Dibayar</th><th className="r">Nilai tebus</th><th className="r">Menuju impas</th></tr></thead>
-                  <tbody>{held.map((r) => {
-                    const value = Number(r.bal) * r.per;
-                    const basis = r.paid > 0 ? r.paid : Number(r.bal) * Number(r.info.unitPrice);
-                    const [label, tone] = STATE_ID[r.info.state] ?? [r.info.state, "neutral"];
-                    return (
-                      <tr key={r.series.id}>
-                        <td><Link href={`/portfolio/${r.series.id}`} style={{ fontWeight: 700 }}>{r.venue.name}</Link><div className="small muted">{r.series.token_symbol ?? ""} · {pct(r.series.share_bps / 10000)} omzet</div></td>
-                        <td className="r num">{r.bal.toString()}{r.locked > 0n && <div className="small muted">{r.locked.toString()} terkunci</div>}</td>
-                        <td><Badge tone={tone}>{label}</Badge></td>
-                        <td className="r num">{rp(r.paid)}</td>
-                        <td className="r num">{rp(value)}</td>
-                        <td className="r num">{basis > 0 ? `${Math.min(999, Math.round((value / basis) * 100))}%` : "–"}</td>
-                      </tr>
-                    );
-                  })}</tbody>
-                </table></div>
-              </Card>
-            </div>
-          )}
+      <div className="grid c2 mt">
+        <Card title="Tarik saldo" subtitle="Hanya ke rekening terdaftar atas nama Anda">
+          {bankOk && balance >= 10_000 ? (
+            <form action={withdrawAction} className="row">
+              <input className="input" name="amount" type="number" min={10000} max={balance} defaultValue={balance} aria-label="Nominal penarikan" />
+              <button className="btn primary">Tarik</button>
+            </form>
+          ) : <p className="small muted">{bank?.status === "cooling_off" ? "Penarikan ditahan selama masa tunggu ganti rekening." : !bank ? "Daftarkan rekening dulu." : "Saldo belum cukup (minimal Rp10.000)."}</p>}
+          <p className="small muted" style={{ marginTop: 8 }}>Saldo juga bisa dipakai membeli token (reinvest) di halaman produk. Tidak ada auto-reinvest.</p>
+          {wds.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{wds.slice(0, 5).map((w) => <tr key={w.id}><td>{date(w.created_at)}</td><td>{rp(Number(w.amount))}</td><td><Badge tone={w.status === "Settled" ? "ok" : w.status === "Failed" ? "bad" : "info"}>{WITHDRAW_STATUS_LABEL[w.status]}</Badge></td></tr>)}</tbody></table>}
+        </Card>
+        <Card title="Riwayat saldo" subtitle="Append-only; koreksi lewat entri pembalik">
+          {ledger.length === 0 ? <p className="small muted">Belum ada.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Jatah periode " + (l.period_no ?? ""), withdrawal: "Penarikan", withdrawal_reversal: "Penarikan gagal (dikembalikan)", reinvest: "Reinvest", sellback: "Jual balik", adjustment: "Penyesuaian" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
+        </Card>
+      </div>
 
-          <div className="section-title"><h2>Posisi Anda</h2></div>
-          {held.length === 0 ? <Card><Empty>Belum ada token. <Link href="/offering" style={{ color: "var(--accent)", fontWeight: 700 }}>Lihat penawaran →</Link></Empty></Card> : (
-            <div className="grid c2">
-              {held.map((r) => {
-                const free = r.bal - r.locked;
-                const canRedeem = ["Funded", "Active"].includes(r.info.state) || (r.info.state === "Closed" && r.info.S > 0n);
-                return (
-                  <Card key={r.series.id} title={r.venue.name} subtitle={`${pct(r.series.share_bps / 10000)} omzet · ${r.series.token_symbol ?? ""} · ${r.info.state}`}
-                    actions={<Link className="btn sm primary" href={`/portfolio/${r.series.id}`}>Detail token</Link>}>
-                    <div className="row" style={{ gap: 8, marginBottom: 6 }}>
-                      <span className="badge plain">{r.bal.toString()} token</span>
-                      {r.locked > 0n && <span className="badge warn">{r.locked.toString()} terkunci untuk redeem</span>}
-                      {r.paid === 0 && r.bal > 0n && <span className="badge info">diterima lewat transfer</span>}
-                    </div>
-                    <PoolJar label={r.paid > 0 ? "Posisi Anda" : "Posisi Anda (garis = harga awal token)"} paid={r.paid > 0 ? r.paid : Number(r.bal) * Number(r.info.unitPrice)} value={Number(r.bal) * r.per} />
-                    <p className="small" style={{ marginTop: 10 }}><Link href={`/portfolio/${r.series.id}`}>Lihat grafik, akrual berjalan, dan aktivitas →</Link></p>
-                    {r.info.state === "Failed" && (
-                      <>
-                        <div className="divider" />
-                        {r.bal > 0n ? (
-                          <div className="stack" style={{ ["--gap" as any]: "8px" }}>
-                            <Notice tone="warn">Penawaran gagal: minimum raise tidak tercapai. Anda berhak atas <b>refund penuh</b> ({rp(Number(r.bal) * Number(r.info.unitPrice))}).</Notice>
-                            <form action={refund}><input type="hidden" name="back" value="/portfolio" /><input type="hidden" name="s" value={r.series.id} /><button className="btn primary">Ajukan refund penuh</button></form>
-                          </div>
-                        ) : <Badge tone="ok">{r.refunded ? "Sudah direfund" : "Tidak ada token"}</Badge>}
-                      </>
-                    )}
-                    {["Funded", "Active"].includes(r.info.state) && free > 0n && (
-                      <>
-                        <div className="divider" />
-                        <div className="eyebrow">Kirim token</div>
-                        <TransferButton seriesId={r.series.id} series={r.ref.series} holder={wallet} nonce={r.tnonce.toString()} chainId={chain.id} max={Number(free)} />
-                        <p className="small muted" style={{ marginTop: 8 }}>Penerima harus sudah lolos KYC di platform. Platform tidak menetapkan harga dan tidak mengurus pembayaran antar pihak. Nilai tebus mengikuti token, bukan pemilik lama.</p>
-                      </>
-                    )}
-                    {canRedeem && free > 0n && (
-                      <>
-                        <div className="divider" />
-                        <RedeemButton seriesId={r.series.id} series={r.ref.series} holder={wallet} nonce={r.nonce.toString()} chainId={chain.id} max={Number(free)} valuePerToken={r.per} futurePerToken={future(r)} />
-                        <p className="small muted" style={{ marginTop: 8 }}>Anda menandatangani permintaan di wallet (tanpa gas). Kustodian (simulasi) lalu membayar dan token dibakar.</p>
-                      </>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
+      <div className="section-title mt"><h2>Pesanan</h2></div>
+      <Card>
+        {(orders ?? []).length === 0 ? <p className="small muted">Belum ada pesanan.</p> : <table className="table small"><thead><tr><th>Tanggal</th><th>Seri</th><th>Token</th><th>Dibayar</th><th>Status</th><th /></tr></thead><tbody>{(orders ?? []).map((o: any) => (
+          <tr key={o.id}>
+            <td>{dt(o.created_at)}</td><td>{o.series?.symbol}</td><td>{Number(o.tokens).toLocaleString("id-ID")}</td><td>{rp(Number(o.amount_idr))}{o.funding === "balance" ? " (saldo)" : ""}</td>
+            <td><Badge tone={o.status === "ALLOCATED" ? "ok" : ["FAILED", "CANCELLED", "EXPIRED"].includes(o.status) ? "bad" : "info"}>{ORDER_STATUS_LABEL[o.status]}</Badge>{o.note && <div className="small muted">{o.note}</div>}</td>
+            <td>{o.status === "AWAITING_PAYMENT" && o.psp_url && <a className="btn sm primary" href={o.psp_url}>Bayar</a>} {["AWAITING_PAYMENT", "AWAITING_SIGNATURE"].includes(o.status) && <form action={cancelOrderAction} style={{ display: "inline" }}><input type="hidden" name="id" value={o.id} /><button className="btn sm ghost">Batalkan</button></form>}{o.allocated_tx && <a className="small" href={etherscanTx(o.allocated_tx)} target="_blank" rel="noreferrer">tx ↗</a>}</td>
+          </tr>))}</tbody></table>}
+      </Card>
+      {(sbs ?? []).length > 0 && <Card title="Pengajuan jual balik" className="mt"><table className="table small"><tbody>{(sbs ?? []).map((r) => <tr key={r.id}><td>{dt(r.created_at)}</td><td>{Number(r.tokens).toLocaleString("id-ID")} token</td><td>{rp(Number(r.amount_idr))}</td><td><Badge tone={r.status === "Executed" ? "ok" : r.status === "Queued" ? "info" : "neutral"}>{SELLBACK_STATUS_LABEL[r.status]}</Badge></td><td>{["Queued", "AwaitingSignature"].includes(r.status) && canSignOut && <form action={cancelSellBackAction}><input type="hidden" name="id" value={r.id} /><button className="btn sm ghost">Batalkan</button></form>}</td></tr>)}</tbody></table></Card>}
+      <div className="mt"><Statements /></div>
     </div>
   );
 }

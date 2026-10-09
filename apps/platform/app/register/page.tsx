@@ -14,7 +14,7 @@ export default async function Register({ searchParams }: { searchParams: Promise
         {sp.err && <div style={{ marginBottom: 14 }}><Notice tone="bad">{sp.err}</Notice></div>}
         <form action={registerAccount} className="stack">
           <label className="field">Saya mendaftar sebagai
-            <select className="select" name="role" defaultValue="owner"><option value="owner">Owner venue (ingin menjual sebagian omzet)</option><option value="investor">Investor (ingin membeli token)</option></select></label>
+            <select className="select" name="role" defaultValue="owner"><option value="owner">Owner venue (memantau dan menandatangani; pengajuan oleh Grounds)</option><option value="investor">Investor (ingin membeli token)</option></select></label>
           <label className="field">Nama lengkap<input className="input" name="name" autoComplete="name" required /></label>
           <label className="field">Email<input className="input" name="email" type="email" autoComplete="username" required /></label>
           <label className="field">Kata sandi (min. 8 karakter)<input className="input" name="password" type="password" minLength={8} autoComplete="new-password" required /></label>

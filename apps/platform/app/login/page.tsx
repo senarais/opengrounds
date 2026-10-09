@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { Notice } from "@venue-rwa/ui";
-import { staffCount } from "@/lib/flows/staff";
 import { signIn } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ err?: string; ok?: string; next?: string }> }) {
   const sp = await searchParams;
-  const noStaff = (await staffCount().catch(() => 1)) === 0;
   return (
     <div className="container" style={{ maxWidth: 440, paddingTop: 56 }}>
       <div className="card">
@@ -23,7 +21,6 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
         </form>
         <p className="small muted" style={{ marginTop: 16 }}>Belum punya akun? <Link href="/register" style={{ color: "var(--accent)", fontWeight: 700 }}>Daftar</Link></p>
       </div>
-      {noStaff && <div style={{ marginTop: 16 }}><Notice tone="info" title="Belum ada akun staf.">Pertama kali memakai platform? <Link href="/setup" style={{ fontWeight: 700 }}>Buat akun staf pertama →</Link></Notice></div>}
     </div>
   );
 }

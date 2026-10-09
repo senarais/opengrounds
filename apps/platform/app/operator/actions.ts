@@ -1,26 +1,28 @@
 "use server";
 import { requireArea } from "@/lib/auth";
-import * as f from "@/lib/flows/series";
-import { getCtx, guarded } from "@/lib/flow";
+import { guarded } from "@/lib/flow";
+import { forcedTransfer, proposeValuation, setFrozen } from "@/lib/flows/admin";
+import { advanceWithdrawal, failWithdrawal } from "@/lib/flows/cash";
+import { checkDeadlines, closePeriod, postPeriod, reviewExpense, syncTopup } from "@/lib/flows/periods";
+import { runSellBackWindow } from "@/lib/flows/sellback";
 
-const backOf = (fd: FormData) => `/operator?s=${String(fd.get("s"))}`;
-const ctxOf = async (fd: FormData) => { await requireArea("operator"); return getCtx(String(fd.get("s"))); };
-const idOf = (fd: FormData) => BigInt(String(fd.get("id")));
+const BACK = "/operator";
+const sid = (fd: FormData) => String(fd.get("seriesId"));
+const op = async () => (await requireArea("operator")).email;
 
-export async function deploy(fd: FormData) {
-  return guarded(backOf(fd), async () => {
-    const me = await requireArea("operator");
-    const r = await f.deploySeries(await getCtx(String(fd.get("s"))), me.email);
-    return `Kontrak seri dideploy: ${r.series.slice(0, 10)}… (token ${r.token.slice(0, 10)}…). Reviewer sekarang bisa membuat attestation.`;
+export async function closePeriodAction(fd: FormData) { const a = await op(); await guarded(BACK, () => closePeriod(sid(fd), a)); }
+export async function postPeriodAction(fd: FormData) { await op(); await guarded(BACK, () => postPeriod(sid(fd), Number(fd.get("periodNo")))); }
+export async function topupAction(fd: FormData) { await op(); await guarded(BACK, async () => { const r = await syncTopup(sid(fd), Number(fd.get("periodNo"))); return r === "paid" ? "Kekurangan diterima, jatah dikreditkan." : `Belum dibayar (${r}).`; }); }
+export async function deadlinesAction(fd: FormData) { await op(); await guarded(BACK, async () => { const r = await checkDeadlines(sid(fd)); return r.length ? r.join("; ") : "Belum ada tenggat yang lewat."; }); }
+export async function windowAction(fd: FormData) { const a = await op(); await guarded(BACK, () => runSellBackWindow(sid(fd), a)); }
+export async function freezeAction(fd: FormData) { const a = await op(); await guarded(BACK, () => setFrozen(sid(fd), String(fd.get("wallet")), fd.get("frozen") === "1", a, String(fd.get("reason") ?? ""))); }
+export async function forceAction(fd: FormData) { const a = await op(); await guarded(BACK, () => forcedTransfer(sid(fd), String(fd.get("from")), String(fd.get("to")), Math.floor(Number(fd.get("tokens"))), a, String(fd.get("reason") ?? ""))); }
+export async function valuationAction(fd: FormData) { const a = await op(); await guarded(BACK, () => proposeValuation(sid(fd), Math.floor(Number(fd.get("valuation"))), String(fd.get("reason") ?? ""), a)); }
+export async function expenseReviewAction(fd: FormData) { const a = await op(); await guarded(BACK, async () => { await reviewExpense(String(fd.get("id")), a, fd.get("approve") === "1", String(fd.get("note") ?? "")); return "Tinjauan biaya disimpan."; }); }
+export async function withdrawalAction(fd: FormData) {
+  const a = await op();
+  await guarded(BACK, async () => {
+    if (fd.get("fail")) { await failWithdrawal(String(fd.get("id")), a, String(fd.get("reason") || "ditolak bank")); return "Penarikan ditandai gagal; saldo investor dikembalikan."; }
+    await advanceWithdrawal(String(fd.get("id")), a); return "Penarikan dimajukan.";
   });
 }
-export async function openOffering(fd: FormData) { return guarded(backOf(fd), async () => f.openOffering(await ctxOf(fd))); }
-export async function closeOffering(fd: FormData) { return guarded(backOf(fd), async () => f.closeOffering(await ctxOf(fd))); }
-export async function releaseTranche(fd: FormData) { return guarded(backOf(fd), async () => f.releaseTranche(await ctxOf(fd), Number(fd.get("n")) === 2 ? 2 : 1)); }
-export async function finalizePeriod(fd: FormData) { return guarded(backOf(fd), async () => f.finalizePeriod(await ctxOf(fd))); }
-export async function reconcilePeriod(fd: FormData) { return guarded(backOf(fd), async () => f.reconcilePeriod(await ctxOf(fd))); }
-export async function approveRedeem(fd: FormData) { return guarded(backOf(fd), async () => f.approveRedeem(await ctxOf(fd), idOf(fd))); }
-export async function confirmRedeem(fd: FormData) { return guarded(backOf(fd), async () => f.confirmRedeem(await ctxOf(fd), idOf(fd))); }
-export async function failRedeem(fd: FormData) { return guarded(backOf(fd), async () => f.failRedeem(await ctxOf(fd), idOf(fd))); }
-export async function endTenor(fd: FormData) { return guarded(backOf(fd), async () => f.endTenor(await ctxOf(fd))); }
-export async function confirmClean(fd: FormData) { return guarded(backOf(fd), async () => f.confirmPeriodClean(await ctxOf(fd))); }

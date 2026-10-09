@@ -6,7 +6,7 @@ import { dt } from "@/lib/format";
 import { addStaff } from "./actions";
 
 export const dynamic = "force-dynamic";
-const ROLE: Record<string, string> = { operator: "Operator (tim kita: review, deploy, buka penawaran, rilis dana)", auditor: "Auditor (pihak independen dari luar: review, wajib ikut menyetujui, co-sign root harian)" };
+const ROLE: Record<string, string> = { operator: "Operator (tim kita: review KYB, tutup periode, jual balik, kepatuhan)", reviewer: "Reviewer (pihak luar independen: review KYB, tanda tangan revaluasi, menggantikan owner yang diam, menengahi sengketa)", spv: "Grounds (SPV): menyetujui pembelian hak dari owner, treasury, modal dan cadangan buyback" };
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; link?: string }> }) {
   const sp = await searchParams;
@@ -15,7 +15,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const { data: staff } = await platformDb().from("users").select("display_name, email, role, created_at").in("role", STAFF_ROLES).order("created_at");
   return (
     <div className="container">
-      <PageHeader eyebrow="Back-office · Staf" title="Staf platform" lead="Akun staf bisa membuka halaman back-office. Penandatangan attestation adalah wallet terpisah (di MetaMask), bukan akun ini." />
+      <PageHeader eyebrow="Back-office · Staf" title="Staf platform" lead="Akun staf bisa membuka halaman back-office. Wallet verifier (MetaMask) terdaftar di registry dan terpisah dari akun login ini." />
       <Flash ok={sp.ok} err={sp.err} />
       {sp.link && <div style={{ marginBottom: 18 }}><Notice tone="warn" title="Tautan undangan (hanya tampil sekali):"><code className="mono" style={{ wordBreak: "break-all" }}>{sp.link}</code></Notice></div>}
       <div className="grid c2">

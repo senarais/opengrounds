@@ -1,14 +1,14 @@
 "use client";
 import { createContext, useContext } from "react";
 
-/** Penandatangan investor: wallet embedded Privy (dibuat otomatis, kuncinya disimpan Privy). */
+/** Penandatangan investor/owner: wallet embedded Privy (dibuat otomatis, kuncinya disimpan Privy). */
 export interface InvestorSigner {
   address: string;
   signTypedData(typedJson: string): Promise<string>;
   signMessage(message: string): Promise<string>;
 }
 export interface SignerState {
-  /** Privy dikonfigurasi (NEXT_PUBLIC_PRIVY_APP_ID terisi) dan pengguna adalah investor. */
+  /** Privy dikonfigurasi (NEXT_PUBLIC_PRIVY_APP_ID terisi) dan pengguna adalah investor atau owner. */
   enabled: boolean;
   status: "off" | "loading" | "linking" | "ready" | "error";
   signer: InvestorSigner | null;
