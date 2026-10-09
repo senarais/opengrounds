@@ -55,7 +55,7 @@ Tiga "pool" yang jangan tertukar: **escrow penggalangan** (dana saat raise), **k
 Prasyarat: Node ≥ 22, pnpm ≥ 10, Foundry, akun Supabase, wallet testnet dengan Sepolia ETH, MetaMask.
 
 ```bash
-cp .env.example .env                 # isi RPC, Supabase, Kagiro, alamat deployer & 3 signer
+cp .env.example .env                 # isi RPC, Supabase, gateway LLM (Morphic), alamat deployer & 3 signer
 pnpm install
 
 # 1) Database (Supabase SQL editor): jalankan berurutan db/migrations/0001 … 0008

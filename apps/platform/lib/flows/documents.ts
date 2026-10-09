@@ -62,9 +62,9 @@ export async function analyzeVenueDocuments(venueId: string, opts: { rerunVerifi
     const { data: docs } = await pf.from("documents").select("*").eq("venue_id", venueId).order("uploaded_at");
     const todo = (docs ?? []).filter((d) => ANALYZABLE.includes(d.kind as DocKind));
     if (!cfg) {
-      for (const d of todo) await pf.from("documents").update({ extraction_status: "failed", extraction_note: "KAGIRO_API_KEY belum diisi di .env: analisis AI tidak berjalan" }).eq("id", d.id);
-      await pf.from("venues").update({ ai_status: "failed", ai_report: { error: "KAGIRO_API_KEY belum diisi", analyzedAt: new Date().toISOString() } }).eq("id", venueId);
-      return { ok: false as const, reason: "KAGIRO_API_KEY belum diisi" };
+      for (const d of todo) await pf.from("documents").update({ extraction_status: "failed", extraction_note: "LLM_API_KEY belum diisi di .env: analisis AI tidak berjalan" }).eq("id", d.id);
+      await pf.from("venues").update({ ai_status: "failed", ai_report: { error: "LLM_API_KEY belum diisi", analyzedAt: new Date().toISOString() } }).eq("id", venueId);
+      return { ok: false as const, reason: "LLM_API_KEY belum diisi" };
     }
     const chat = chatFn(cfg);
     const byKind: Partial<Record<DocKind, Extraction>> = {};

@@ -6,7 +6,14 @@ import { userClient } from "@/lib/supabase";
 /** Halaman awal setelah login menurut peran: auditor langsung ke review, operator ke konsol operator. */
 const homeFor = (role: string) => (role === "owner" ? "/owner" : role === "investor" ? "/portfolio" : role === "auditor" ? "/reviewer" : "/operator");
 
-const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : "/");
+/** Hanya path internal. Tolak "//host", "/\\host" (browser menganggap backslash = slash), dan karakter kontrol; lalu pastikan tetap satu origin. */
+const safeNext = (n: string) => {
+  if (!n.startsWith("/") || n.startsWith("//") || /[\\\u0000-\u001f]/.test(n)) return "/";
+  try {
+    const u = new URL(n, "http://internal.invalid");
+    return u.origin === "http://internal.invalid" ? `${u.pathname}${u.search}${u.hash}` : "/";
+  } catch { return "/"; }
+};
 
 export async function signIn(fd: FormData) {
   const next = safeNext(String(fd.get("next") || "/"));

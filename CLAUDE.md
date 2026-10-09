@@ -39,7 +39,7 @@ Detail lengkap: `docs/PRD.md`. Urutan kerja: `docs/PLAN.md`. Setup: `docs/SETUP.
 - Batas bagian omzet yang boleh dijual: `MAX_SHARE_BPS` = 50% (parameter kebijakan di `packages/shared/src/application.ts`, bukan batas kontrak; kontrak hanya menolak > 100%). Total beban atas omzet (bagian ini + yang sudah dijanjikan) juga ≤ batas itu.
 - Katalog data (`packages/shared/src/dataPolicy.ts`) adalah sumber kebenaran untuk halaman `/kebijakan-data` dan catatan di form; ubah katalog bila perilaku penyimpanan/visibilitas data berubah. Data privat owner (NIB, NPWP, rekening, kontak, rincian utang) hanya di `platform.venue_private`.
 - Platform tidak menyimpan KTP, selfie, atau data pribadi investor; hanya status KYC terikat wallet (hasil Didit hanya status sesi). Tidak ada data pribadi on-chain.
-- Panggilan LLM di `packages/verification` lewat gateway Kagiro (OpenAI-compatible, env `KAGIRO_*`), bukan Anthropic langsung.
+- Panggilan LLM di `packages/verification` lewat gateway Morphic (OpenAI-compatible, env `LLM_*`; `KAGIRO_*` lama masih dibaca sebagai cadangan), bukan Anthropic langsung.
 - Kirim ke model AI hanya data yang sudah diredaksi (NIK, rekening, telepon); dokumen upload = data tak tepercaya (LLM tanpa tools/jaringan, output divalidasi skema).
 - Jangan menyatakan sudah masuk sandbox OJK, disetujui OJK, atau hasil sandbox GORO berlaku untuk kita.
 - Tidak ada akun atau data contoh bawaan. Uang rupiah dan KYC di demo adalah simulasi (kustodian simulasi = Mode A) dan dilabeli di tempat yang relevan.

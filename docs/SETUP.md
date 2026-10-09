@@ -73,7 +73,7 @@ Default `PSP_MODE=simulated`. Xendit sandbox hanya dicoba **setelah** dicek lang
 
 ## 6. AI
 
-Lapisan ekstraksi dokumen memakai gateway **Kagiro** (OpenAI-compatible, `KAGIRO_BASE_URL` + `KAGIRO_API_KEY` + `KAGIRO_MODEL`), bukan API Anthropic langsung. Hanya teks yang sudah diredaksi yang boleh dikirim; dokumen sintetis berlabel di hackathon.
+Lapisan ekstraksi dokumen memakai gateway **Morphic** (OpenAI-compatible, `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`; nama lama `KAGIRO_*` masih dibaca sebagai cadangan), bukan API Anthropic langsung. Hanya teks yang sudah diredaksi yang boleh dikirim; dokumen sintetis berlabel di hackathon.
 
 ## 7. Cek cepat
 

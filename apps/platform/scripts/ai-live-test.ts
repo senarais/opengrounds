@@ -1,5 +1,5 @@
 /**
- * Uji AI SUNGGUHAN ke gateway Kagiro memakai PDF sintetis yang dibuat di sini (tidak ada data nyata).
+ * Uji AI SUNGGUHAN ke gateway LLM (OpenAI-compatible) memakai PDF sintetis yang dibuat di sini (tidak ada data nyata).
  * Jalur sama dengan aplikasi: PDF → teks per halaman → redaksi → LLM → validasi kutipan → konsistensi.
  */
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -22,7 +22,7 @@ async function makePdf(pages: string[]): Promise<Uint8Array> {
 
 (async () => {
   const cfg = llmFromEnv();
-  if (!cfg) throw new Error("KAGIRO_API_KEY belum diisi di .env");
+  if (!cfg) throw new Error("LLM_API_KEY belum diisi di .env");
   console.log(`Model: ${cfg.model} @ ${cfg.baseUrl}\n`);
   const chat = chatFn(cfg);
   const run = async (kind: DocKind, pages: string[]) => extractDocument(kind, await pdfPages(await makePdf(pages)), chat);

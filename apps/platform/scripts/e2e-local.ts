@@ -221,7 +221,7 @@ async function main() {
     const { data: s0 } = await pf.from("series").select("*").eq("id", seriesId).single();
     ok(s0!.token_symbol && s0!.token_symbol.length <= 5 && s0!.contract_address === null, `seri dibuat (simbol ${s0!.token_symbol}), kontrak belum dideploy`);
 
-    // ---------------------------------------------------------------- 2b. analisis AI dokumen (Kagiro sungguhan)
+    // ---------------------------------------------------------------- 2b. analisis AI dokumen (gateway LLM sungguhan)
     {
       const { analyzeVenueDocuments } = await import("../lib/flows/documents");
       const r = await analyzeVenueDocuments(venueId);

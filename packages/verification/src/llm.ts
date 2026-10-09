@@ -1,10 +1,12 @@
-/** Klien LLM tipis untuk gateway OpenAI-compatible (Kagiro). Tanpa tools, tanpa jaringan lain, keluaran harus JSON. */
+/** Klien LLM tipis untuk gateway OpenAI-compatible (saat ini Morphic). Tanpa tools, tanpa jaringan lain, keluaran harus JSON. */
 export interface LlmConfig { baseUrl: string; apiKey: string; model: string; timeoutMs?: number }
 
 export function llmFromEnv(env: Record<string, string | undefined> = process.env): LlmConfig | null {
-  const apiKey = env.KAGIRO_API_KEY;
+  // LLM_* adalah nama baru; KAGIRO_* tetap dibaca sebagai cadangan supaya .env lama tidak patah.
+  const apiKey = env.LLM_API_KEY || env.KAGIRO_API_KEY;
   if (!apiKey) return null;
-  return { baseUrl: (env.KAGIRO_BASE_URL ?? "https://api.kagiro.net/v1").replace(/\/$/, ""), apiKey, model: env.KAGIRO_MODEL ?? "deepseek-v4-pro" };
+  const baseUrl = env.LLM_BASE_URL || env.KAGIRO_BASE_URL || "https://morphic-api.web.id/v1";
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model: env.LLM_MODEL || env.KAGIRO_MODEL || "deepseek-v4-pro" };
 }
 
 /** Ambil objek JSON dari balasan model (boleh terbungkus ```json ... ``` atau teks pengantar). */
