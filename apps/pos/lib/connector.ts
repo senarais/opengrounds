@@ -39,6 +39,7 @@ export async function ingestTransactions(db: AppClient, companyId: string, rows:
 }
 
 async function ingestSale(db: AppClient, companyId: string, productId: string, r: ImportRow, source: "import" | "api") {
+  if (r.method !== "gateway") throw new Error(`transaksi ${r.externalRef}: pembayaran di luar payment gateway (${r.method === "cash" ? "tunai" : "QRIS milik sendiri"}) tidak diterima`);
   const id = `bk_${randomBytes(4).toString("hex")}`;
   const start = new Date(r.occurredAt);
   const label = (r.label ?? "Pelanggan").slice(0, 40);

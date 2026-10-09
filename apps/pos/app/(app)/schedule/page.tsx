@@ -89,13 +89,8 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 <tr><td>Total tagihan</td><td><b>{rp(pickedPrice)}</b></td></tr>
               </tbody></table>
               <label className="field">Nama pelanggan<input className="input" name="customer" placeholder="mis. Budi" required /></label>
-              <label className="field">Metode pembayaran
-                <select className="select" name="method" defaultValue="gateway">
-                  <option value="gateway">Link bayar (QRIS/VA/e-wallet via gateway): terverifikasi</option>
-                  <option value="cash">Tunai (dicatat manual): tidak terverifikasi</option>
-                  <option value="qris_sendiri">QRIS statis milik sendiri (dicatat manual): tidak terverifikasi</option>
-                </select></label>
-              <p className="small muted">Pembayaran di luar gateway tercatat jujur di ledger tetapi tidak dihitung sebagai omzet terverifikasi dan menurunkan rasio cakupan yang dinilai platform.</p>
+              <input type="hidden" name="method" value="gateway" />
+              <p className="small muted">Pembayaran hanya lewat link bayar payment gateway (QRIS, virtual account, e-wallet). Tunai dan QRIS milik sendiri tidak diterima, supaya setiap omzet terverifikasi dan bisa dilihat investor.</p>
               <div className="row"><button className="btn primary">Buat booking &amp; tagihan</button><span className="small muted">Hold 10 menit. Nama hanya untuk tampilan; yang dicatat di ledger adalah hash.</span></div>
             </form>
           ) : <Empty>Belum ada sesi yang dipilih.</Empty>}

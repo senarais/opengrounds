@@ -31,7 +31,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
         <Card title="API ingest" subtitle="Untuk sistem yang bisa memanggil HTTP.">
           <pre className="mono small" style={{ whiteSpace: "pre-wrap" }}>{`POST ${base}/api/ingest
 Authorization: Bearer <kunci>
-{"transactions":[{"externalRef":"INV-1","occurredAt":"2026-09-01T03:00:00.000Z","kind":"sale","amount":150000,"method":"cash"}]}`}</pre>
+{"transactions":[{"externalRef":"INV-1","occurredAt":"2026-09-01T03:00:00.000Z","kind":"sale","amount":150000,"method":"gateway","pspRef":"INV-XND-1"}]}`}</pre>
           {manage && (
             <form action={makeApiKey} className="row" style={{ marginTop: 12 }}>
               <input className="input" name="label" placeholder="Nama integrasi" /><button className="btn">Buat kunci</button>

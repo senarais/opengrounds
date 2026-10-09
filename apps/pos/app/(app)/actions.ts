@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { computeDailyRoot } from "@venue-rwa/connectors";
 import { admin } from "@/lib/supabase";
 import { canManage, requireSession } from "@/lib/session";
-import { cancelBooking, createBooking, createOffRailBooking, refundBooking, syncPendingPayments } from "@/lib/pos";
+import { cancelBooking, createBooking, refundBooking, syncPendingPayments } from "@/lib/pos";
 
 /** Jalankan aksi, lalu kembali ke halaman asal dengan pesan hasil (?ok= / ?err=). */
 async function run(back: string, fn: () => Promise<string | void>, extra?: () => Record<string, string>): Promise<never> {
@@ -40,11 +40,9 @@ export async function newBooking(fd: FormData) {
   return run(backTo(fd), async () => {
     const s = await guard();
     const base = { productId: String(fd.get("product")), date: String(fd.get("date")), sessionIndex: Number(fd.get("session")), customerLabel: String(fd.get("customer") || ""), createdBy: s.userId };
+    // Semua pembayaran wajib lewat payment gateway: tunai dan QRIS milik sendiri tidak diterima.
     const method = String(fd.get("method") || "gateway");
-    if (method === "cash" || method === "qris_sendiri") {
-      const r = await createOffRailBooking(admin(), s.company.id, { ...base, method });
-      return `Booking ${r.bookingId} dicatat lunas di luar sistem (${method === "cash" ? "tunai" : "QRIS sendiri"}) · Sesi ${r.sessionIndex} · ${rp(r.amount)}. Tidak dihitung sebagai omzet terverifikasi gateway.`;
-    }
+    if (method !== "gateway") throw new Error("Pembayaran di luar payment gateway (tunai / QRIS milik sendiri) tidak diterima. Semua booking dibayar lewat link bayar gateway.");
     const r = await createBooking(admin(), s.company.id, base);
     token = r.payToken;
     return `Booking ${r.bookingId} dibuat · Sesi ${r.sessionIndex} · ${rp(r.amount)}. Tagihan otomatis terbit; kirim tautan bayar ke pelanggan (hold 10 menit).`;
