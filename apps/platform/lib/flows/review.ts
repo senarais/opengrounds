@@ -66,7 +66,7 @@ async function resetApprovals(ctx: Ctx) {
  */
 export async function prepareApproval(ctx: Ctx, actor: { email: string; role: string }) {
   assertCanVote(ctx, actor);
-  const { data: run } = await ctx.pf.from("verification_runs").select("recommendation").eq("series_id", ctx.series.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: run } = await ctx.pf.from("verification_runs").select("recommendation, evidence_root").eq("series_id", ctx.series.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (!run) throw new Error("Belum ada hasil verifikasi untuk seri ini");
   if (run.recommendation !== "pass") throw new Error("Rekomendasi verifikasi “tidak lolos”. Persetujuan tidak bisa ditandatangani; tolak pengajuan atau jalankan ulang verifikasi.");
   const predicted = await predictSeriesAddress();
@@ -74,6 +74,11 @@ export async function prepareApproval(ctx: Ctx, actor: { email: string; role: st
   let notice = "";
   if (draft && draft.payload.series.toLowerCase() !== predicted.address.toLowerCase()) {
     if (draft.signatures.length > 0) { await resetApprovals(ctx); notice = "Alamat kontrak yang diprediksi berubah (wallet operator mengirim transaksi lain), jadi persetujuan sebelumnya diulang. "; }
+    draft = null;
+  }
+  // verifikasi/skor diulang setelah draft dibuat: bukti (evidence root) berubah, jadi tanda tangan lama tidak boleh dipakai
+  if (draft && draft.payload.evidenceRoot.toLowerCase() !== String(run.evidence_root).toLowerCase()) {
+    if (draft.signatures.length > 0) { await resetApprovals(ctx); notice = "Hasil verifikasi diperbarui setelah ada yang menyetujui, jadi persetujuan sebelumnya diulang agar semua menandatangani bukti terbaru. "; }
     draft = null;
   }
   if (!draft) {

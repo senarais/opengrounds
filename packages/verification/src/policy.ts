@@ -39,6 +39,15 @@ export interface ScoreComponent {
   detail: string;
 }
 
+/** Syarat poin penuh dan poin nol tiap komponen skor (mirror rumus di evaluatePolicy; ubah bersamaan). */
+export const SCORE_HINTS: Record<string, { full: string; zero: string; how: string }> = {
+  installment: { full: "cicilan ≤ 10% omzet", zero: "cicilan ≥ 40% omzet", how: "Makin kecil cicilan bank dibanding omzet, makin lega arus kasnya untuk membayar investor." },
+  occupancy: { full: "okupansi ≥ 80%", zero: "okupansi ≤ 40%", how: "Okupansi menunjukkan seberapa terisi lapangan; ini sumber omzet yang dibagi ke investor." },
+  seasonality: { full: "variasi bulanan ≤ 10%", zero: "variasi bulanan ≥ 40%", how: "Omzet yang stabil antar bulan membuat bagian investor lebih mudah diperkirakan." },
+  history: { full: "data 12 bulan penuh", zero: "tanpa riwayat", how: "Makin panjang riwayat, makin kuat dasar perkiraan omzet." },
+  recon: { full: "tanpa exception rekonsiliasi terbuka", zero: "ada exception terbuka", how: "Rekonsiliasi bersih berarti penjualan cocok dengan settlement payment gateway." },
+};
+
 export interface PolicyResult {
   gates: Gate[];
   components: ScoreComponent[];

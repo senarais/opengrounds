@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Design system: Venue RWA · PoS
+   Design system: OpenGrounds (platform + PoS)
    Palet: Midnight #0F172A (primer/teks) · Slate #334155 (sekunder) · Ash #94A3B8 (tersier)
           Sunrise #FF7A00 (aksen) · Amber #FFD166 (sorotan) · Ivory #F8FAFC (latar)
    Visual penjelas (diorama, koin terbelah, toples, paspor) memakai palet yang sama; bukan hiasan.
@@ -76,7 +76,8 @@ a:hover { text-decoration-color: var(--accent); }
 
 /* ---- Logo ---- */
 .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-.logo svg { flex: none; }
+.logo svg, .logo img { flex: none; display: block; }
+.sidebar .logo img { background: var(--ivory); border-radius: 10px; padding: 4px 5px; width: 36px; height: 40px; object-fit: contain; }
 .logo b { font-family: var(--font-head); font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
 .logo small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .02em; margin-top: -2px; }
 
@@ -414,3 +415,18 @@ a.chip.free:hover { border-color: var(--accent); background: var(--accent-soft);
 .decision .after li::before { content: "→ "; color: var(--amber); }
 .decision .msg { margin-top: 10px; font-size: 13px; color: var(--amber); }
 .decision .msg.err { color: #fca5a5; }
+
+.scorebar { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 13px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.scorebar:last-of-type { border-bottom: 0; }
+.scorebar .track { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.scorebar .track i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.scorebar.full .track i { background: var(--ok); }
+
+.hl { background: linear-gradient(transparent 52%, color-mix(in srgb, var(--amber) 80%, transparent) 52%); color: inherit; font-weight: 700; padding: 0 2px; border-radius: 2px; }
+.summary { padding: 18px 20px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--surface); }
+.summary .points { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 11px; font-size: 14.5px; line-height: 1.6; max-width: 78ch; }
+
+.vchart { margin: 14px 0 0; }
+.vchart figcaption { margin-bottom: 6px; }
+.vchart-wrap { position: relative; }
+.vchart-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: var(--shadow); pointer-events: none; white-space: nowrap; }

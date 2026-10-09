@@ -13,6 +13,7 @@ import { onchainSigners } from "@/lib/signers";
 import { signedUrl } from "@/lib/storage";
 import { votesOf } from "@/lib/flows/review";
 import { createDraftAction, reanalyze, submitOnchain } from "./actions";
+import { RunSummary } from "./RunSummary";
 
 export const dynamic = "force-dynamic";
 const DOC_LABEL: Record<string, string> = { sales_data: "Data penjualan", ownership: "Bukti kepemilikan", insurance: "Polis asuransi", consent_letter: "Surat persetujuan bank", lease: "Perjanjian sewa", bank_statement: "Mutasi rekening", loan: "Kredit & jaminan", tax: "NPWP / pajak", license: "Izin usaha", photo: "Foto venue", other: "Lainnya" };
@@ -112,6 +113,32 @@ export default async function ReviewerPage({ searchParams }: { searchParams: Pro
               <div><dt>Sumber data</dt><dd style={{ fontSize: 15 }}>{venue.data_source === "pos" ? "PoS / gateway" : venue.data_source === "connector" ? "Sistem eksternal (impor)" : "Dilaporkan owner"}</dd></div>
             </dl>
           ) : <Notice tone="warn">Belum ada hasil verifikasi untuk seri ini.</Notice>}
+
+          {run && Array.isArray(g?.components) && g.components.length > 0 && <RunSummary run={run} g={g} proposedPrice={Number(series.unit_price)} dataSource={venue.data_source} />}
+
+          {Array.isArray(g?.components) && g.components.length > 0 && (
+            <section className="sect" aria-labelledby="skor" style={{ marginTop: 28 }}>
+              <header>
+                <div>
+                  <h2 id="skor">Rincian skor: {run!.score.toLocaleString("id-ID")} dari 10.000</h2>
+                  <p>Dihitung aturan deterministik dari data omzet, bukan oleh AI. Ambang lolos 6.000 dan semua gerbang harus lolos.</p>
+                </div>
+                <Badge tone={run!.score >= 6000 ? "ok" : "bad"}>{run!.score >= 6000 ? "di atas ambang" : "di bawah ambang"}</Badge>
+              </header>
+              {(g.components as { id: string; label: string; points: number; max: number; detail: string }[]).map((c) => (
+                <div key={c.id} className={`scorebar ${c.points >= c.max ? "full" : ""}`}>
+                  <div><b>{c.label}</b><div className="small muted">{c.detail}</div></div>
+                  <span className="num"><b>{c.points.toLocaleString("id-ID")}</b> <span className="muted">/ {c.max.toLocaleString("id-ID")}</span></span>
+                  <div className="track" role="progressbar" aria-valuenow={c.points} aria-valuemin={0} aria-valuemax={c.max}><i style={{ width: `${Math.min(100, (c.points / c.max) * 100)}%` }} /></div>
+                </div>
+              ))}
+              {(venue.ai_report?.checks ?? []).length > 0 && (
+                <p className="small muted" style={{ marginTop: 12 }}>
+                  Pemeriksaan dokumen oleh AI: {(venue.ai_report.checks as { status: string }[]).filter((c) => c.status === "pass").length} cocok, {(venue.ai_report.checks as { status: string }[]).filter((c) => c.status === "fail").length} tidak cocok, {(venue.ai_report.checks as { status: string }[]).filter((c) => c.status !== "pass" && c.status !== "fail").length} perlu cek manual. Hasil ini tidak menambah poin, tetapi menentukan gerbang “Dokumen konsisten dengan isian” dan peringatan di bawah.
+                </p>
+              )}
+            </section>
+          )}
 
           <section className="sect" aria-labelledby="temuan">
             <header>
@@ -247,10 +274,11 @@ export default async function ReviewerPage({ searchParams }: { searchParams: Pro
                 );
               })}
             </div>
-            {canVote ? (
+            {canVote && mine ? (
+              <p className="hint" style={{ marginTop: 0 }}>Suara Anda sudah tercatat: <b>menyetujui</b>. Menunggu {viewer.role === "auditor" ? "operator (tim)" : "auditor (independen)"} memberi suara; setelah itu kontrak dan attestation diproses otomatis.</p>
+            ) : canVote ? (
               <>
                 {!passRec && <div className="msg err" style={{ marginBottom: 10 }}>Sistem merekomendasikan “tidak lolos”, jadi persetujuan dikunci. Anda hanya bisa menolak.</div>}
-                {mine && <div className="msg" style={{ marginBottom: 10 }}>Anda sudah {mine.decision === "approved" ? "menyetujui" : "menolak"}. Suara boleh diganti selama review belum selesai.</div>}
                 <ReviewVoteButtons seriesId={series.id} email={viewer.email} role={viewer.role} chainId={chain.id} />
                 <p className="hint">Anda masuk sebagai <b>{viewer.role === "operator" ? "operator" : "auditor"}</b> ({viewer.email}). MetaMask meminta <b>satu</b> tanda tangan (tanpa gas) dari {seatHint(viewer.role === "auditor" ? "auditor" : "operator")}. Tanda tangan yang sama dipakai sebagai suara dan sebagai tanda tangan attestation.</p>
               </>
