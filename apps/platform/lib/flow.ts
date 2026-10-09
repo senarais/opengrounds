@@ -1,74 +1,51 @@
-import { keccak256, stringToBytes, toHex, type Address, type Hex } from "viem";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import type { AppClient } from "@venue-rwa/shared";
-import type { SeriesRef } from "./chain";
+import type { Address } from "viem";
 import { platformDb } from "./db";
 import { friendlyError } from "./operator";
 
-/** Konteks satu seri (satu pengajuan perusahaan). `ref` null bila kontrak seri belum dideploy. */
-export interface Ctx {
-  pf: AppClient;
-  venue: any;
-  series: any;
-  ref: SeriesRef | null;
-  companyId: string | null; // company PoS (null sebelum disetujui)
-}
+export type Account = "escrow" | "spv_pocket" | "spv_capital" | "owner" | "venue_reserve" | "buyback_reserve" | "distribution" | "spv_ops" | "platform_ops";
 
-function toCtx(pf: AppClient, venue: any, series: any): Ctx {
-  const ref = series.contract_address && series.token_address ? { series: series.contract_address as Address, token: series.token_address as Address } : null;
-  return { pf, venue, series, ref, companyId: venue.pos_company_id ?? null };
-}
-
-/** Ambil konteks seri berdasarkan id; tanpa id → seri terbaru yang sudah punya kontrak. */
-export async function getCtx(seriesId?: string | null): Promise<Ctx> {
-  const pf = platformDb();
-  let q = pf.from("series").select("*");
-  q = seriesId ? q.eq("id", seriesId) : q.not("contract_address", "is", null).order("created_at", { ascending: false }).limit(1);
-  const { data } = await q;
-  const series = data?.[0];
-  if (!series) throw new Error(seriesId ? "Seri tidak ditemukan" : "Belum ada seri yang dideploy");
-  const { data: venue } = await pf.from("venues").select("*").eq("id", series.venue_id).single();
-  return toCtx(pf, venue, series);
+/** Jejak audit append-only: siapa, apa, sebelum/sesudah. */
+export async function audit(actor: string, action: string, a: { entity?: string; entityId?: string; before?: unknown; after?: unknown; detail?: unknown } = {}) {
+  await platformDb().from("audit_log").insert({ actor, action, entity: a.entity ?? null, entity_id: a.entityId ?? null, before: a.before ?? null, after: a.after ?? null, detail: a.detail ?? null });
 }
 
 /**
- * Konteks untuk halaman staf: tanpa id → pengajuan terbaru (aktif, belum digantikan) MESKI kontraknya belum dideploy.
- * (getCtx tanpa id hanya mengambil seri yang sudah punya kontrak, sehingga operator tidak bisa membuka halaman untuk men-deploy pengajuan pertama.)
+ * Buku rekening simulasi (§8.4). Satu gerak uang = beberapa baris bertanda (keluar negatif, masuk positif) dengan ref yang sama.
+ * Idempoten per (akun, ref): pemanggilan ulang tidak menggandakan.
  */
-export async function getStaffCtx(seriesId?: string | null): Promise<Ctx> {
-  if (seriesId) return getCtx(seriesId);
-  const { data } = await platformDb().from("series").select("id").neq("status", "Superseded").order("created_at", { ascending: false }).limit(1);
-  if (!data?.[0]) throw new Error("Belum ada pengajuan");
-  return getCtx(data[0].id);
-}
-
-/** Kontrak harus sudah ada untuk aksi on-chain. */
-export function chainRef(ctx: Ctx): SeriesRef {
-  if (!ctx.ref) throw new Error("Kontrak seri belum dideploy. Deploy dulu dari konsol Operator.");
-  return ctx.ref;
-}
-
-export function needCompany(ctx: Ctx): string {
-  if (!ctx.companyId) throw new Error("Perusahaan belum punya workspace PoS (dibuat saat attestation disetujui).");
-  return ctx.companyId;
-}
-
-export async function listSeries() {
+export async function moveCash(seriesId: string | null, ref: string, legs: [Account, number][]) {
   const pf = platformDb();
-  const { data: series } = await pf.from("series").select("*").neq("status", "Superseded").order("created_at", { ascending: false });
-  const { data: venues } = await pf.from("venues").select("id, name, status, pos_company_id, data_source");
-  const byId = new Map((venues ?? []).map((v) => [v.id, v]));
-  return (series ?? []).map((s) => ({ series: s, venue: byId.get(s.venue_id) as any }));
+  const { data: existing } = await pf.from("cash_ledger").select("account").eq("ref", ref);
+  const done = new Set((existing ?? []).map((r) => r.account));
+  const rows = legs.filter(([acc, amt]) => amt !== 0 && !done.has(acc)).map(([account, amount]) => ({ series_id: seriesId, account, amount, ref, simulated: true }));
+  if (rows.length) {
+    const { error } = await pf.from("cash_ledger").insert(rows);
+    if (error) throw new Error(`cash_ledger: ${error.message}`);
+  }
 }
 
-export async function audit(actor: string, action: string, detail: object = {}) {
-  await platformDb().from("audit_log").insert({ actor, action, detail });
+export async function cashBalance(seriesId: string, account: Account): Promise<number> {
+  const { data } = await platformDb().from("cash_ledger").select("amount").eq("series_id", seriesId).eq("account", account);
+  return (data ?? []).reduce((a, r) => a + Number(r.amount), 0);
 }
 
-export const refOf = (s: string): Hex => keccak256(toHex(stringToBytes(s)));
+export async function getSeries(id: string) {
+  const pf = platformDb();
+  const { data: series } = await pf.from("series").select("*").eq("id", id).maybeSingle();
+  if (!series) throw new Error("Seri tidak ditemukan");
+  const { data: venue } = await pf.from("venues").select("*").eq("id", series.venue_id).single();
+  return { series, venue, address: series.contract_address as Address | null };
+}
+export type SeriesCtx = Awaited<ReturnType<typeof getSeries>>;
 
-/** Bungkus server action: tangkap error → redirect dengan pesan; sukses → revalidate + pesan. `back` boleh memuat query (?s=...). */
+export function needContract(ctx: SeriesCtx): Address {
+  if (!ctx.address) throw new Error("Kontrak seri belum dideploy");
+  return ctx.address;
+}
+
+/** Bungkus server action: tangkap error → redirect dengan pesan; sukses → revalidate + pesan. `back` boleh memuat query. */
 export async function guarded(back: string, fn: () => Promise<string | void>): Promise<never> {
   const [path, query = ""] = back.split("?");
   const keep = new URLSearchParams(query);
@@ -85,4 +62,13 @@ export async function guarded(back: string, fn: () => Promise<string | void>): P
   revalidatePath(path!);
   const qs = keep.toString();
   redirect(qs ? `${path}?${qs}` : path!);
+}
+
+/** Untuk route handler JSON. */
+export async function jsonGuard(fn: () => Promise<unknown>) {
+  try {
+    return Response.json(await fn());
+  } catch (e: any) {
+    return Response.json({ error: friendlyError(e) }, { status: 400 });
+  }
 }

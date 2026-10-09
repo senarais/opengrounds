@@ -1,40 +1,61 @@
-import { keccak256, stringToBytes, toHex, type Address, type Hex } from "viem";
-import { ADDR, chain } from "./chain";
+import { encodeAbiParameters, keccak256, stringToBytes, toHex, type Address, type Hex } from "viem";
+import type { Waterfall } from "@venue-rwa/shared";
+import { REGISTRY, chain } from "./chain";
+
+/**
+ * Data EIP-712 yang ditandatangani di luar chain. Harus identik dengan kontrak:
+ *  - Attestation  : AttestationRegistry (domain "OpenGroundsAttestation"), ditandatangani 2 dari 3 slot
+ *  - Order        : VenueSeries (domain "OpenGroundsSeries"), ditandatangani investor lewat Privy
+ *  - SellBack     : VenueSeries, ditandatangani pemegang lewat Privy
+ */
+export const KIND = { ACQUISITION_CLOSED: 0, REVENUE_PERIOD: 1, VALUATION_UPDATE: 2 } as const;
+export type AttKind = keyof typeof KIND;
+export const SLOT = { PLATFORM: 1, COUNTERPARTY: 2, VERIFIER: 4 } as const;
+export type SlotName = keyof typeof SLOT;
 
 const t = (name: string, type: string) => ({ name, type });
+export const attestationTypes = { Attestation: [t("kind", "uint8"), t("seriesId", "uint256"), t("refId", "uint256"), t("payloadHash", "bytes32"), t("deadline", "uint64")] } as const;
+export const orderTypes = { Order: [t("investor", "address"), t("tokens", "uint256"), t("paidIdr", "uint256"), t("orderId", "uint256"), t("deadline", "uint64")] } as const;
+export const sellBackTypes = { SellBack: [t("holder", "address"), t("tokens", "uint256"), t("paidIdr", "uint256"), t("requestId", "uint256"), t("deadline", "uint64")] } as const;
 
-export const attestationTypes = {
-  Attestation: [
-    t("series", "address"), t("assetId", "bytes32"), t("verdict", "uint8"), t("aiRecommendation", "uint8"), t("score", "uint16"),
-    t("evidenceRoot", "bytes32"), t("rulesetHash", "bytes32"), t("maxPrice", "uint256"), t("maxShareBps", "uint16"),
-    t("maxTotalShareBps", "uint16"), t("expiry", "uint64"), t("overrideReasonHash", "bytes32"), t("nonce", "uint256"),
-  ],
-} as const;
-export const dailyRootTypes = { DailyRoot: [t("series", "address"), t("day", "uint32"), t("root", "bytes32"), t("count", "uint32")] } as const;
-export const redeemTypes = { RedeemRequest: [t("series", "address"), t("holder", "address"), t("units", "uint256"), t("nonce", "uint256"), t("deadline", "uint256")] } as const;
+export const registryDomain = () => ({ name: "OpenGroundsAttestation", version: "1", chainId: chain.id, verifyingContract: REGISTRY.address });
+export const seriesDomain = (series: Address) => ({ name: "OpenGroundsSeries", version: "1", chainId: chain.id, verifyingContract: series });
 
-export const transferTypes = { TransferRequest: [t("series", "address"), t("from", "address"), t("to", "address"), t("units", "uint256"), t("nonce", "uint256"), t("deadline", "uint256")] } as const;
+export interface AttMessage { kind: number; seriesId: bigint; refId: bigint; payloadHash: Hex; deadline: bigint }
+export const attMessage = (kind: AttKind, series: Address, refId: bigint | number, payloadHash: Hex, deadline: bigint | number): AttMessage =>
+  ({ kind: KIND[kind], seriesId: BigInt(series), refId: BigInt(refId), payloadHash, deadline: BigInt(deadline) });
 
-export const attestationDomain = () => ({ name: "AssetAttestation", version: "1", chainId: chain.id, verifyingContract: ADDR.attestation });
-export const seriesDomain = (series: Address) => ({ name: "Series", version: "1", chainId: chain.id, verifyingContract: series });
+export interface OrderMessage { investor: Address; tokens: bigint; paidIdr: bigint; orderId: bigint; deadline: bigint }
+export interface SellBackMessage { holder: Address; tokens: bigint; paidIdr: bigint; requestId: bigint; deadline: bigint }
 
-/** Payload attestation sebagai string (aman disimpan di JSON & dikirim ke wallet). */
-export interface AttPayload {
-  series: Address; assetId: Hex; verdict: number; aiRecommendation: number; score: number; evidenceRoot: Hex; rulesetHash: Hex;
-  maxPrice: string; maxShareBps: number; maxTotalShareBps: number; expiry: string; overrideReasonHash: Hex; nonce: string;
-}
-/** Bentuk untuk viem (uint256/uint64 = bigint). */
-export const attMessage = (p: AttPayload) => ({ ...p, maxPrice: BigInt(p.maxPrice), expiry: BigInt(p.expiry), nonce: BigInt(p.nonce) });
+// ---------------------------------------------------------------- payload attestation (sama dengan kontrak)
 
-/** JSON untuk eth_signTypedData_v4 (MetaMask): semua angka sebagai string. */
-export function walletTypedData(primaryType: string, types: Record<string, readonly { name: string; type: string }[]>, domain: object, message: Record<string, unknown>) {
+export const acquisitionPayload = (a: { valuation: bigint; supply: bigint; refPrice: bigint; stakeBps: number; spvFeeBps: number; evidenceHash: Hex }) =>
+  keccak256(encodeAbiParameters(
+    [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint16" }, { type: "uint16" }, { type: "bytes32" }],
+    [a.valuation, a.supply, a.refPrice, a.stakeBps, a.spvFeeBps, a.evidenceHash],
+  ));
+
+const waterfallTuple = { type: "tuple", components: ["gross", "refunds", "opex", "tax", "operatorFee", "reserve", "platformFee"].map((name) => ({ name, type: "uint256" })) } as const;
+export const toChainWaterfall = (w: Waterfall) => ({
+  gross: BigInt(w.gross), refunds: BigInt(w.refunds), opex: BigInt(w.opex), tax: BigInt(w.tax), operatorFee: BigInt(w.operatorFee), reserve: BigInt(w.reserve), platformFee: BigInt(w.platformFee),
+});
+export const periodPayload = (periodId: number, periodEnd: bigint, w: Waterfall, evidenceHash: Hex) =>
+  keccak256(encodeAbiParameters([{ type: "uint256" }, { type: "uint64" }, waterfallTuple, { type: "bytes32" }], [BigInt(periodId), periodEnd, toChainWaterfall(w), evidenceHash]));
+
+export const valuationPayload = (nonce: bigint, valuation: bigint, refPrice: bigint, evidenceHash: Hex) =>
+  keccak256(encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes32" }], [nonce, valuation, refPrice, evidenceHash]));
+
+/** JSON untuk eth_signTypedData_v4 / Privy: semua angka sebagai string. */
+export function walletTypedData(primaryType: string, types: Record<string, readonly { name: string; type: string }[]>, domain: object, message: object) {
   return JSON.stringify({
     types: { EIP712Domain: [t("name", "string"), t("version", "string"), t("chainId", "uint256"), t("verifyingContract", "address")], ...types },
     primaryType,
     domain,
-    message: Object.fromEntries(Object.entries(message).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v])),
+    message: Object.fromEntries(Object.entries(message as Record<string, unknown>).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v])),
   });
 }
 
-export const dayNum = (isoDate: string) => Number(isoDate.replaceAll("-", "")); // 2026-10-08 -> 20261008
-export const assetIdFor = (venueUuid: string): Hex => keccak256(toHex(stringToBytes(`venue:${venueUuid}`)));
+/** Hash bukti dari objek apa pun (JSON kanonik di luar chain, hanya hash yang masuk chain). */
+export const evidenceHashOf = (s: string): Hex => keccak256(toHex(stringToBytes(s)));
+export const refOf = evidenceHashOf;

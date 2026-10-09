@@ -1,8 +1,8 @@
 import { platformDb } from "../db";
 
-/** Dua jenis staf: operator (tim kita) dan auditor (pihak independen dari luar). Peran "reviewer" lama dihapus: tidak punya fungsi sendiri. */
-export type StaffRole = "operator" | "auditor";
-export const STAFF_ROLES: StaffRole[] = ["operator", "auditor"];
+/** Tiga jenis staf: operator (tim internal), reviewer (pihak luar independen), spv (Grounds, pembeli hak; akunnya dibuat operator lewat undangan). */
+export type StaffRole = "operator" | "reviewer" | "spv";
+export const STAFF_ROLES: StaffRole[] = ["operator", "reviewer", "spv"];
 
 export async function staffCount(): Promise<number> {
   const { count } = await platformDb().from("users").select("*", { count: "exact", head: true }).in("role", STAFF_ROLES);
@@ -54,7 +54,7 @@ export async function createInvite(actor: { email: string; role: string }, input
   const token = randomBytes(32).toString("hex");
   const { error } = await pf.from("staff_invites").insert({ email, display_name: name, role: input.role, token_hash: hashToken(token), invited_by: actor.email, expires_at: new Date(Date.now() + INVITE_HOURS * 3_600_000).toISOString() });
   if (error) throw new Error(error.message);
-  await audit(actor.email, "staff.invite", { email, role: input.role });
+  await audit(actor.email, "staff.invite", { detail: { email, role: input.role } });
   return { token, email };
 }
 
@@ -79,7 +79,7 @@ export async function acceptInvite(token: string, password: string) {
     await platformDb().from("staff_invites").update({ used_at: null }).eq("id", inv.id); // gagal (mis. sandi pendek): undangan tetap bisa dicoba lagi
     throw e;
   }
-  await audit(inv.email, "staff.join", { role: inv.role });
+  await audit(inv.email, "staff.join", { detail: { role: inv.role } });
   return { email: inv.email, role: inv.role };
 }
 

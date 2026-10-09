@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED = ["/owner", "/portfolio", "/verification", "/reviewer", "/auditor", "/operator", "/staff"];
+const PROTECTED = ["/owner/", "/portfolio", "/review", "/verifier", "/spv", "/operator", "/staff"];
 
 /** Menyegarkan sesi Supabase Auth dan mengarahkan ke login untuk halaman owner dan back-office. */
 export async function middleware(req: NextRequest) {
@@ -24,7 +24,7 @@ export async function middleware(req: NextRequest) {
     return res;
   }
   const path = req.nextUrl.pathname;
-  if (!user && PROTECTED.some((p) => path === p || path.startsWith(p + "/"))) {
+  if (!user && PROTECTED.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : p + "/"))) {
     const url = new URL("/login", req.url);
     url.searchParams.set("next", path);
     return NextResponse.redirect(url);

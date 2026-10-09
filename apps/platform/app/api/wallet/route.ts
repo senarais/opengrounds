@@ -8,7 +8,7 @@ import { verifyWalletLink } from "@/lib/wallet-link";
 export async function POST(req: Request) {
   try {
     const me = await getMe();
-    if (!me || me.role !== "investor") return NextResponse.json({ error: "Khusus investor yang sudah login" }, { status: 403 });
+    if (!me || (me.role !== "investor" && me.role !== "owner")) return NextResponse.json({ error: "Khusus investor/owner yang sudah login" }, { status: 403 });
     const { address, message, signature } = (await req.json()) as { address: string; message: string; signature: Hex };
     const wallet = await verifyWalletLink(me.authId, address, message, signature);
     const { error } = await platformDb().from("users").update({ wallet }).eq("id", me.userId);

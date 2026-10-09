@@ -17,7 +17,7 @@ export async function getMe(): Promise<Me | null> {
   return { authId: user.id, email: user.email ?? "", userId: u.id, role: u.role as Role, name: u.display_name, wallet: u.wallet ?? null };
 }
 
-export const isStaff = (m: Me | null) => !!m && (m.role === "operator" || m.role === "reviewer" || m.role === "auditor");
+export const isStaff = (m: Me | null) => !!m && (m.role === "operator" || m.role === "reviewer" || m.role === "spv");
 
 /** Wajib login sebagai owner. */
 export async function requireOwner(next = "/owner"): Promise<Me> {
@@ -43,7 +43,7 @@ export async function requireArea(area: StaffArea): Promise<Me> {
   return me;
 }
 
-/** Wajib login sebagai staf platform (operator / reviewer / auditor). */
+/** Wajib login sebagai staf platform (operator / reviewer / spv). */
 export async function requireStaff(next = "/operator"): Promise<Me> {
   const me = await getMe();
   if (!me) redirect(`/login?next=${encodeURIComponent(next)}`);

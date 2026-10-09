@@ -1,28 +1,34 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { createPublicClient, http, parseAbi, type Address } from "viem";
+import { createPublicClient, http, type Address } from "viem";
 import { foundry, sepolia } from "viem/chains";
-import { contractErrors } from "./errors";
+import { SERIES_STATES, type SeriesStatus } from "@venue-rwa/shared";
+import { attestationRegistryAbi, seriesTokenAbi, venueSeriesAbi } from "./abi";
 
-function deployments(): { Series: Address; SeriesToken: Address; AssetAttestation: Address; chainId: number } {
-  // Uji lokal: cukup ATTESTATION_ADDRESS (seri dideploy per pengajuan).
-  if (process.env.ATTESTATION_ADDRESS) {
-    const zero = "0x0000000000000000000000000000000000000000" as Address;
-    return { Series: (process.env.SERIES_ADDRESS as Address) ?? zero, SeriesToken: (process.env.TOKEN_ADDRESS as Address) ?? zero, AssetAttestation: process.env.ATTESTATION_ADDRESS as Address, chainId: Number(process.env.CHAIN_ID ?? 11155111) };
+export { attestationRegistryAbi, seriesTokenAbi, venueSeriesAbi };
+
+/**
+ * Hanya registry attestation yang dideploy sekali (scripts/deploy.sh → deployments/latest.json).
+ * Kontrak seri (VenueSeries + SeriesToken) dideploy per venue oleh platform setelah KYB disetujui.
+ */
+interface Deployment { chainId: number; AttestationRegistry: Address; platform: Address; verifier: Address }
+let fileCache: { mtime: number; v: Deployment } | null = null;
+function deployment(): Deployment {
+  if (process.env.REGISTRY_ADDRESS) {
+    return { chainId: Number(process.env.CHAIN_ID ?? 11155111), AttestationRegistry: process.env.REGISTRY_ADDRESS as Address, platform: process.env.ATTESTOR_PLATFORM_ADDRESS as Address, verifier: process.env.ATTESTOR_VERIFIER_ADDRESS as Address };
   }
-  // Dibaca ulang bila file berubah (mtime): server yang sedang jalan tidak boleh memegang alamat registry lama setelah deploy ulang.
+  // dibaca ulang bila file berubah: server yang sedang jalan tidak memegang alamat registry lama setelah deploy ulang
   const path = join(process.cwd(), "../../packages/contracts/deployments/latest.json");
   const mtime = statSync(path).mtimeMs;
   if (!fileCache || fileCache.mtime !== mtime) fileCache = { mtime, v: JSON.parse(readFileSync(path, "utf8")) };
+  if (!fileCache.v.AttestationRegistry) throw new Error("Registry attestation belum dideploy (jalankan ./scripts/deploy.sh)");
   return fileCache.v;
 }
-let fileCache: { mtime: number; v: ReturnType<typeof deployments> } | null = null;
 
-/** Registry attestation dipakai bersama semua seri. Seri dan token diturunkan per pengajuan (lihat SeriesRef). */
-export const ADDR = { get attestation(): Address { return deployments().AssetAttestation; } };
-/** Seri demo bawaan (deployments/latest.json), dipakai bootstrap untuk perusahaan "Ayo". */
-export const LEGACY_SERIES = { get series(): Address { return deployments().Series; }, get token(): Address { return deployments().SeriesToken; } };
-export interface SeriesRef { series: Address; token: Address }
+export const REGISTRY = {
+  get address(): Address { return deployment().AttestationRegistry; },
+};
+
 export const etherscan = (a: string) => `https://sepolia.etherscan.io/address/${a}`;
 export const etherscanTx = (h: string) => `https://sepolia.etherscan.io/tx/${h}`;
 
@@ -32,90 +38,53 @@ export const chain = process.env.CHAIN_ID === "31337" ? foundry : sepolia;
 export const rpcUrl = (process.env.SEPOLIA_RPC_URL ?? "").replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace("/ws/v3/", "/v3/");
 export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
-export const seriesAbi = [...contractErrors, ...parseAbi([
-  "function token() view returns (address)",
-  "function attestation() view returns (address)",
-  "function state() view returns (uint8)",
-  "function target() view returns (uint256)",
-  "function minRaise() view returns (uint256)",
-  "function unitPrice() view returns (uint256)",
-  "function cap() view returns (uint256)",
-  "function shareBps() view returns (uint16)",
-  "function raised() view returns (uint256)",
-  "function countedRaise() view returns (uint256)",
-  "function minted() view returns (uint256)",
-  "function refunded() view returns (uint256)",
-  "function released() view returns (uint256)",
-  "function tranche1Released() view returns (bool)",
-  "function tranche2Released() view returns (bool)",
-  "function exceptionOpen() view returns (bool)",
-  "function periodClean(uint64) view returns (bool)",
-  "function P() view returns (uint256)",
-  "function R() view returns (uint256)",
-  "function S() view returns (uint256)",
-  "function lastPeriod() view returns (uint64)",
-  "function offeringEnd() view returns (uint64)",
-  "function offeringDuration() view returns (uint32)",
-  "function tenorEnd() view returns (uint64)",
-  "function nextRedeemId() view returns (uint256)",
-  "function redeemValuePerToken() view returns (uint256)",
-  "function auditor() view returns (address)",
-  "function dailyRoot(uint32) view returns (bytes32)",
-  "function openOffering()",
-  "function setKyc(address,bool)",
-  "function recordPurchase(address,uint256,bytes32,bool)",
-  "function closeOffering()",
-  "function refund(address)",
-  "function releaseTranche1()",
-  "function releaseTranche2()",
-  "function postPool(uint64,uint256,bytes32)",
-  "function reconcilePeriod(uint64,bool,bytes32)",
-  "function hasRole(bytes32,address) view returns (bool)",
-  "function approveRedeem(uint256)",
-  "function confirmRedeem(uint256)",
-  "function failRedeem(uint256)",
-  "function setException(bool)",
-  "function endTenor()",
-  "function anchorRoot(uint32,bytes32,uint32,bytes)",
-  "function requestRedeemFor(address,uint256,uint256,bytes) returns (uint256)",
-  "function redeems(uint256) view returns (address holder, uint128 units, uint128 payout, uint8 status)",
-  "function pendingUnits(address) view returns (uint256)",
-  "function redeemNonce(address) view returns (uint256)",
-  "function transferNonce(address) view returns (uint256)",
-  "function transferFor(address,address,uint256,uint256,bytes)",
-])];
+export const stateName = (n: number | bigint): SeriesStatus => SERIES_STATES[Number(n)] ?? "Draft";
 
-export const attestationAbi = [...contractErrors, ...parseAbi([
-  "struct Attestation { address series; bytes32 assetId; uint8 verdict; uint8 aiRecommendation; uint16 score; bytes32 evidenceRoot; bytes32 rulesetHash; uint256 maxPrice; uint16 maxShareBps; uint16 maxTotalShareBps; uint64 expiry; bytes32 overrideReasonHash; uint256 nonce; }",
-  "function isValid(address) view returns (bool)",
-  "function maxPrice(address) view returns (uint256)",
-  "function nonces(address) view returns (uint256)",
-  "function signers(uint256) view returns (address)",
-  "function totalShareBps(bytes32) view returns (uint16)",
-  "function submit(Attestation a, bytes[] sigs)",
-  "function revoke(address series, bytes32 reasonHash)",
-])];
+/** Penanda tangan yang terdaftar di registry saat ini (slot PLATFORM dan VERIFIER; COUNTERPARTY per seri). */
+export async function registrySigners(series?: Address) {
+  const r = (functionName: "platform" | "verifier") => publicClient.readContract({ address: REGISTRY.address, abi: attestationRegistryAbi, functionName });
+  const [platform, verifier] = await Promise.all([r("platform"), r("verifier")]);
+  const counterparty = series ? await publicClient.readContract({ address: REGISTRY.address, abi: attestationRegistryAbi, functionName: "counterpartyOf", args: [series] }) : null;
+  return { platform, verifier, counterparty };
+}
 
-export const tokenAbi = [...contractErrors, ...parseAbi([
-  "function balanceOf(address) view returns (uint256)",
-  "function totalSupply() view returns (uint256)",
-  "function symbol() view returns (string)",
-  "function allowed(address) view returns (bool)",
-])];
-
-export const SERIES_STATES = ["Draft", "Offering", "Funded", "Failed", "Active", "Closed"] as const;
-
-export async function readSeries(ref: SeriesRef) {
-  const r = (fn: string) => publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: fn as any }) as Promise<any>;
-  const [state, target, minRaise, unitPrice, cap, shareBps, raised, countedRaise, minted, released, t1, t2, exc, P, R, S, lastPeriod, redeemValue, nextRedeemId, auditor] = await Promise.all([
-    "state", "target", "minRaise", "unitPrice", "cap", "shareBps", "raised", "countedRaise", "minted", "released", "tranche1Released", "tranche2Released", "exceptionOpen", "P", "R", "S", "lastPeriod", "redeemValuePerToken", "nextRedeemId", "auditor",
-  ].map(r));
-  const attValid = (await publicClient.readContract({ address: ADDR.attestation, abi: attestationAbi, functionName: "isValid", args: [ref.series] })) as boolean;
-  const totalSupply = (await publicClient.readContract({ address: ref.token, abi: tokenAbi, functionName: "totalSupply" })) as bigint;
+/** Ringkasan satu seri dari chain. */
+export async function readSeries(series: Address) {
+  const c = { address: series, abi: venueSeriesAbi } as const;
+  const [state, supply, valuationIdr, refPriceIdr, lastPeriodId, holderCount, overduePeriods, openDisputes, token, treasury, params, accPerTokenE18] = await Promise.all([
+    publicClient.readContract({ ...c, functionName: "state" }),
+    publicClient.readContract({ ...c, functionName: "supply" }),
+    publicClient.readContract({ ...c, functionName: "valuationIdr" }),
+    publicClient.readContract({ ...c, functionName: "refPriceIdr" }),
+    publicClient.readContract({ ...c, functionName: "lastPeriodId" }),
+    publicClient.readContract({ ...c, functionName: "holderCount" }),
+    publicClient.readContract({ ...c, functionName: "overduePeriods" }),
+    publicClient.readContract({ ...c, functionName: "openDisputes" }),
+    publicClient.readContract({ ...c, functionName: "token" }),
+    publicClient.readContract({ ...c, functionName: "treasury" }),
+    publicClient.readContract({ ...c, functionName: "params" }),
+    publicClient.readContract({ ...c, functionName: "accPerTokenE18" }),
+  ]);
+  const treasuryBalance = supply > 0n ? await publicClient.readContract({ address: token, abi: seriesTokenAbi, functionName: "balanceOf", args: [treasury] }) : 0n;
   return {
-    state: SERIES_STATES[Number(state)] ?? "?",
-    target, minRaise, unitPrice, cap, shareBps: Number(shareBps), raised, countedRaise, minted, released, tranche1Released: t1 as boolean, tranche2Released: t2 as boolean,
-    exceptionOpen: exc as boolean, P, R, S, lastPeriod, redeemValue, nextRedeemId, auditor: auditor as Address, attValid, totalSupply,
+    state: stateName(state), supply, valuationIdr, refPriceIdr, lastPeriodId, holderCount, overduePeriods, openDisputes, token, treasury, treasuryBalance,
+    circulating: supply - treasuryBalance, accPerTokenE18,
+    params: { stakeBps: params[0], spvFeeBps: params[1], maxOpexBps: params[2], sellbackDiscountBps: params[3], maxHoldingBps: params[4], lockPeriod: params[5], payoutWindow: params[6], defaultGrace: params[7], ownerSignWindow: params[8] },
   };
 }
 export type SeriesInfo = Awaited<ReturnType<typeof readSeries>>;
+
+/** Saldo, lot (jumlah + waktu buka kunci), dan jatah kumulatif satu pemegang. */
+export async function readHolder(series: Address, token: Address, holder: Address) {
+  const [balance, unlocked, lots, claimable] = await Promise.all([
+    publicClient.readContract({ address: token, abi: seriesTokenAbi, functionName: "balanceOf", args: [holder] }),
+    publicClient.readContract({ address: token, abi: seriesTokenAbi, functionName: "unlockedBalanceOf", args: [holder] }),
+    publicClient.readContract({ address: token, abi: seriesTokenAbi, functionName: "lotsOf", args: [holder] }),
+    publicClient.readContract({ address: series, abi: venueSeriesAbi, functionName: "claimableOf", args: [holder] }),
+  ]);
+  return { balance, unlocked, lots: lots.map((l) => ({ amount: l.amount, unlockAt: Number(l.unlockAt) })), claimable };
+}
+
+export async function readPeriod(series: Address, periodId: number | bigint) {
+  return publicClient.readContract({ address: series, abi: venueSeriesAbi, functionName: "periodOf", args: [BigInt(periodId)] });
+}

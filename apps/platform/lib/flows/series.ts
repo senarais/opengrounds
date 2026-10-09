@@ -1,275 +1,161 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { createWalletClient, encodeDeployData, getContractAddress, http, type Abi, type Address, type Hex } from "viem";
-import { computeDailyRoot } from "@venue-rwa/connectors";
-import { utcDate } from "@venue-rwa/shared";
-import { privateKeyToAccount } from "viem/accounts";
-import { eligibleBetween } from "@venue-rwa/connectors";
-import { reconcile } from "@venue-rwa/verification";
-import { ADDR, chain, publicClient, readSeries, rpcUrl, seriesAbi, tokenAbi } from "../chain";
-import { posDb } from "../db";
-import { audit, chainRef, getCtx, needCompany, refOf, type Ctx } from "../flow";
-import { operatorSend } from "../operator";
-import { onchainSigners } from "../signers";
+import type { Address, Hex } from "viem";
+import { DEMO_PARAMS, buildDisclosure, canonicalJson, disclosureHash, tokenSymbolFor } from "@venue-rwa/shared";
+import { kybGate } from "@venue-rwa/verification";
+import { REGISTRY, attestationRegistryAbi, readSeries, venueSeriesAbi } from "../chain";
+import { venueSeriesBytecode } from "../abi";
+import { platformDb } from "../db";
+import { acquisitionPayload, evidenceHashOf } from "../eip712";
+import { audit, getSeries, moveCash, needContract } from "../flow";
+import { operatorAddress, operatorDeploy, operatorSend, treasuryAddress } from "../operator";
+import { addSignature, createAttestation, isReady, markSubmitted, signAsPlatform, sigsOf } from "./attest";
+import { loadOnboarding, ownerOfVenue } from "./onboarding";
+import { provisionPos } from "./provision";
 
-const send = (ctx: Ctx, fn: string, args: unknown[] = []) => operatorSend(chainRef(ctx).series, seriesAbi as any, fn, args);
-const rp = (n: number | bigint) => "Rp" + Number(n).toLocaleString("id-ID");
+const ACQUISITION_WINDOW_DAYS = 7;
 
-async function custody(ctx: Ctx, account: string, amount: number, ref: string) {
-  await ctx.pf.from("custody_ledger").insert({ series_id: ctx.series.id, account, amount, ref, simulated: true });
-}
+/**
+ * Setelah KYB disetujui (§3.3–3.4): valuasi final → workspace PoS → deploy VenueSeries → daftar di registry dengan owner sebagai
+ * COUNTERPARTY → markVerified → attestation ACQUISITION_CLOSED disiapkan dan ditandatangani PLATFORM.
+ * Token BELUM terbit: owner harus menandatangani juga (dana akuisisi diterima, simulasi), baru `activate` mencetak supply ke treasury.
+ * `assetValue` = V_aset yang ditetapkan reviewer dari dokumen (demo: input reviewer, berlabel).
+ */
+export async function issueSeries(venueId: string, actor: string, assetValue: number) {
+  const pf = platformDb();
+  const { data: existing } = await pf.from("series").select("id").eq("venue_id", venueId).not("status", "eq", "Closed").limit(1);
+  if (existing?.length) throw new Error("Venue ini sudah punya seri");
+  const { data: kc } = await pf.from("kyb_cases").select("*").eq("venue_id", venueId).order("created_at", { ascending: false }).limit(1).single();
+  if (kc?.status !== "APPROVED") throw new Error("KYB belum disetujui");
+  const ownerId = await ownerOfVenue(venueId);
+  const { data: owner } = await pf.from("users").select("wallet, display_name").eq("id", ownerId).single();
+  if (!owner?.wallet) throw new Error("Owner belum punya wallet. Minta owner membuka dashboard sekali supaya wallet Privy-nya dibuat.");
 
-/** Artefak hasil `forge build` (ABI + bytecode). */
-function artifact(name: string): { abi: Abi; bytecode: Hex } {
-  const j = JSON.parse(readFileSync(join(process.cwd(), "../../packages/contracts/out", `${name}.sol`, `${name}.json`), "utf8"));
-  return { abi: j.abi, bytecode: j.bytecode.object as Hex };
+  const { input, venue, docs } = await loadOnboarding(venueId);
+  const gate = kybGate(input, docs.map((d) => d.kind), { assetValue });
+  if (!gate.valuation) throw new Error("Valuasi tidak bisa dihitung");
+  const val = gate.valuation;
+  const p = DEMO_PARAMS;
+
+  const { data: valuationRow, error: ve } = await pf.from("valuations").insert({
+    venue_id: venueId, v_aset: assetValue, d12: val.d12, r_bps: p.requiredYieldBps, v_income: val.vIncome, v: val.v, y_bps: val.yieldBps, in_band: val.inBand,
+    stake_bps: input.offering.stakeBps, token_price: p.tokenPrice, supply: val.supply, ref_price: val.refPrice, inputs: { basis: val.basis, annualized: gate.financial.annualized, params: p },
+    status: "approved", decided_by: actor,
+  }).select("id").single();
+  if (ve) throw new Error(ve.message);
+
+  // halaman produk publik + hash (terikat ke evidence ACQUISITION_CLOSED)
+  const disclosure = buildDisclosure(input, val, docs.map((d) => ({ kind: d.kind, sha256: d.sha256 })));
+  const dHash = disclosureHash(disclosure);
+  await pf.from("venues").update({ public_profile: disclosure.public, public_profile_hash: dHash }).eq("id", venueId);
+  await provisionPos(venueId);
+
+  const { data: taken } = await pf.from("series").select("symbol");
+  const symbol = tokenSymbolFor(venue.name, (taken ?? []).map((t) => t.symbol));
+  const name = `Grounds ${venue.name}`.slice(0, 48);
+  const { data: series, error: se } = await pf.from("series").insert({
+    venue_id: venueId, valuation_id: valuationRow!.id, status: "Draft", name, symbol, stake_bps: input.offering.stakeBps, spv_fee_bps: p.spvFeeBps, max_opex_bps: p.maxOpexBps,
+    sellback_discount_bps: p.sellbackDiscountBps, max_holding_bps: p.maxHoldingBps, lock_seconds: p.lockSeconds, payout_window_seconds: p.payoutWindowSeconds,
+    default_grace_seconds: p.defaultGraceSeconds, owner_sign_window_seconds: p.ownerSignWindowSeconds, split_bps: p.splitBps, supply: val.supply, ref_price: val.refPrice,
+    valuation_idr: val.v, owner_wallet: owner.wallet,
+  }).select("*").single();
+  if (se) throw new Error(se.message);
+
+  const op = operatorAddress();
+  const { address, tx } = await operatorDeploy(venueSeriesAbi as any, venueSeriesBytecode as Hex, [op, op, REGISTRY.address, treasuryAddress(), name, symbol, {
+    stakeBps: input.offering.stakeBps, spvFeeBps: p.spvFeeBps, maxOpexBps: p.maxOpexBps, sellbackDiscountBps: p.sellbackDiscountBps, maxHoldingBps: p.maxHoldingBps,
+    lockPeriod: p.lockSeconds, payoutWindow: p.payoutWindowSeconds, defaultGrace: p.defaultGraceSeconds, ownerSignWindow: p.ownerSignWindowSeconds,
+  }]);
+  await pf.from("series").update({ contract_address: address, deployed_tx: tx }).eq("id", series!.id);
+  await operatorSend(REGISTRY.address, attestationRegistryAbi as any, "registerSeries", [address, owner.wallet]);
+  const kybHash = evidenceHashOf(canonicalJson({ case: kc.id, decidedBy: kc.decided_by, decidedAt: kc.decided_at, findings: kc.risk_summary?.counts ?? null }));
+  await operatorSend(address, venueSeriesAbi as any, "markVerified", [kybHash]);
+  const info = await readSeries(address);
+  await pf.from("series").update({ status: "Verified", token_address: info.token }).eq("id", series!.id);
+  await audit(actor, "series.deploy", { entity: "series", entityId: series!.id, after: { address, tx, symbol, valuation: val.v, supply: val.supply } });
+
+  // Token belum bisa terbit: Grounds (SPV) harus menyetujui pembelian hak lebih dulu (approveAcquisition), baru platform menandatangani.
+  return { seriesId: series!.id as string, address };
 }
 
 /**
- * Deploy kontrak Series untuk satu pengajuan (token dibuat oleh konstruktor Series).
- * Gas diestimasi oleh NODE (bukan simulasi lokal Foundry, yang di Sepolia terlalu kecil) lalu diberi margin 30%.
- * Admin & operator = wallet operator platform (diungkapkan); auditor = penandatangan ke-3 (pihak independen).
+ * Grounds (SPV) sebagai pembeli menyetujui pembelian X% hak di valuasi V (keputusan manusia dengan identitas tercatat).
+ * Setelah itu attestation ACQUISITION_CLOSED dibuat dan slot PLATFORM menandatangani atas nama Grounds via Open Grounds;
+ * owner (penjual) menandatangani terakhir.
  */
-export async function deploySeries(ctx: Ctx, _actorEmail?: string) {
+export async function approveAcquisition(seriesId: string, actor: string, note: string) {
+  const ctx = await getSeries(seriesId);
+  if (ctx.series.status !== "Verified") throw new Error(`Seri berstatus ${ctx.series.status}; persetujuan hanya untuk seri Verified`);
+  if (ctx.series.spv_approved_at) throw new Error("Pembelian sudah disetujui SPV");
+  const { error } = await platformDb().from("series").update({ spv_approved_by: actor, spv_approved_at: new Date().toISOString(), spv_note: note || null }).eq("id", seriesId).is("spv_approved_at", null);
+  if (error) throw new Error(error.message);
+  await audit(actor, "spv.approve_acquisition", { entity: "series", entityId: seriesId, after: { valuation: ctx.series.valuation_idr, stakeBps: ctx.series.stake_bps, supply: ctx.series.supply, note } });
+  await prepareAcquisition(seriesId);
+  return `Pembelian hak ${(ctx.series.stake_bps / 100).toFixed(0)}% disetujui. Platform sudah menandatangani; menunggu tanda tangan owner (penjual).`;
+}
+
+/** Attestation ACQUISITION_CLOSED: bukti = hash halaman produk + valuasi. Hanya setelah SPV menyetujui; PLATFORM langsung menandatangani. */
+export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
+  const ctx = await getSeries(seriesId);
+  const addr = needContract(ctx);
   const s = ctx.series;
-  if (s.contract_address) throw new Error("Kontrak seri sudah dideploy");
-  if (s.review_status !== "approved") throw new Error("Pengajuan belum disetujui. Review manusia dilakukan SEBELUM deploy (halaman Reviewer).");
-  const pk = process.env.OPERATOR_PRIVATE_KEY;
-  if (!pk) throw new Error("OPERATOR_PRIVATE_KEY belum ada. Jalankan scripts/setup-operator.sh");
-  const account = privateKeyToAccount((pk.startsWith("0x") ? pk : `0x${pk}`) as Hex);
-  const signers = await onchainSigners();
-  const { abi, bytecode } = artifact("Series");
-  const symbol = s.token_symbol ?? "SERI";
-  const name = s.name ?? `${ctx.venue.name} · bagi hasil omzet`;
-  const data = encodeDeployData({
-    abi, bytecode,
-    args: [account.address, account.address, signers[2], ADDR.attestation, name, symbol, {
-      target: BigInt(s.target), minRaise: BigInt(s.min_raise), unitPrice: BigInt(s.unit_price), shareBps: s.share_bps, tenorDays: Math.round(s.tenor_days), offeringDuration: 7 * 86_400,
-    }],
-  });
-  const gas = await publicClient.estimateGas({ account, data });
-  const wallet = createWalletClient({ account, chain, transport: http(rpcUrl) });
-  const hash = await wallet.sendTransaction({ account, chain, data, gas: (gas * 13n) / 10n });
-  const rc = await publicClient.waitForTransactionReceipt({ hash });
-  if (rc.status !== "success" || !rc.contractAddress) throw new Error(`Deploy gagal on-chain: ${hash}`);
-  const series = rc.contractAddress as Address;
-  // Token = CREATE pertama dari konstruktor Series (nonce kontrak mulai 1), jadi alamatnya deterministik.
-  // Jangan membaca token() di sini: node RPC lain di belakang load balancer bisa belum melihat blok deploy ("returned no data").
-  const token = getContractAddress({ from: series, nonce: 1n });
-  await ctx.pf.from("series").update({ contract_address: series, token_address: token, deployed_tx: hash, name }).eq("id", s.id);
-  await audit("operator", "series.deploy", { series: series, token, tx: hash, venue: ctx.venue.name });
-  return { series, token, tx: hash };
-}
-
-export async function openOffering(ctx: Ctx) {
-  if (ctx.series.status === "Superseded") throw new Error("Seri ini sudah digantikan seri baru");
-  if (ctx.series.open_after && new Date(ctx.series.open_after) > new Date()) throw new Error(`Masa tunggu perubahan harga belum selesai (buka paling cepat ${new Date(ctx.series.open_after).toLocaleString("id-ID")})`);
-  const tx = await send(ctx, "openOffering");
-  await ctx.pf.from("series").update({ status: "Offering" }).eq("id", ctx.series.id);
-  await ctx.pf.from("venues").update({ status: "active" }).eq("id", ctx.venue.id);
-  await audit("platform", "series.open", { tx });
-  return "Penawaran dibuka. Kontrak memeriksa attestation valid dan harga ≤ harga maksimal.";
-}
-
-export async function closeOffering(ctx: Ctx) {
-  const tx = await send(ctx, "closeOffering");
-  const s = await readSeries(chainRef(ctx));
-  await ctx.pf.from("series").update({ status: s.state }).eq("id", ctx.series.id);
-  let posted = "";
-  if (s.state === "Funded") {
-    // penanda awal periode pembukuan = saat penawaran DIBUKA (offeringEnd − offeringDuration): omzet selama penawaran ikut menjadi hak
-    // kantong investor begitu terdanai, dibagi rata ke suplai final. Bila penawaran gagal, tidak ada yang diposting (refund tetap penuh).
-    const ref = chainRef(ctx);
-    const [end, dur] = await Promise.all([
-      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "offeringEnd" }) as Promise<bigint>,
-      publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "offeringDuration" }) as Promise<number | bigint>,
-    ]);
-    const openedAt = new Date((Number(end) - Number(dur)) * 1000);
-    const { error } = await ctx.pf.from("pool_periods").upsert({ series_id: ctx.series.id, period_id: 0, final_amount: 0, pending_amount: 0, period_end: openedAt.toISOString() });
-    if (error) throw new Error(error.message);
-    // salurkan langsung omzet yang sudah terkumpul sejak penawaran dibuka
-    try { posted = ` ${await finalizePeriod(await getCtx(ctx.series.id))}`; }
-    catch (e: any) { if (!/Belum ada akrual/.test(String(e?.message))) posted = ` Omzet belum tersalurkan: ${e?.shortMessage ?? e?.message ?? e}.`; }
-  }
-  await audit("platform", "series.close", { tx, result: s.state });
-  return s.state === "Funded" ? `Penawaran ditutup: Funded. Suplai terkunci; omzet sejak penawaran dibuka menjadi hak kantong investor.${posted}` : `Penawaran ditutup: ${s.state}. Investor dapat refund penuh.`;
-}
-
-/** Tutup otomatis begitu semua token terjual: suplai sudah final, jadi tidak perlu menunggu batas waktu. */
-export async function closeIfSoldOut(seriesId: string) {
-  const ctx = await getCtx(seriesId);
-  const s = await readSeries(chainRef(ctx));
-  if (s.state !== "Offering" || BigInt(s.minted) < BigInt(s.cap)) return null;
-  return closeOffering(ctx);
-}
-
-export async function releaseTranche(ctx: Ctx, n: 1 | 2) {
-  const ref = chainRef(ctx);
-  const before = (await readSeries(ref)).released;
-  const tx = await send(ctx, n === 1 ? "releaseTranche1" : "releaseTranche2");
-  const s = await readSeries(ref);
-  const amount = Number(s.released - before);
-  await custody(ctx, "escrow", -amount, `tahap-${n}`);
-  await custody(ctx, "owner", amount, `tahap-${n}`);
-  await ctx.pf.from("series").update({ status: s.state }).eq("id", ctx.series.id);
-  await audit("platform", `series.tranche${n}`, { tx, amount });
-  return `Rilis tahap ${n}: ${rp(amount)} dari escrow ke owner (kustodian simulasi)`;
-}
-
-export async function finalizePeriod(ctx: Ctx) {
-  const company = needCompany(ctx);
-  const s = await readSeries(chainRef(ctx));
-  const { data: prev } = await ctx.pf.from("pool_periods").select("*").eq("series_id", ctx.series.id).order("period_id", { ascending: false }).limit(1).maybeSingle();
-  const from = new Date(prev?.period_end ?? ctx.series.created_at);
-  const now = new Date();
-  const calc = await eligibleBetween(posDb(), company, from, now);
-  const amount = Math.floor((calc.eligible * ctx.series.share_bps) / 10_000);
-  if (amount <= 0) throw new Error("Belum ada akrual untuk difinalkan (buat & bayar booking di PoS dulu)");
-  const periodId = Number(s.lastPeriod) + 1;
-  const reportHash = refOf(JSON.stringify({ periodId, from, to: now, eligible: calc.eligible, amount }));
-  const { error } = await ctx.pf.from("pool_periods").insert({ series_id: ctx.series.id, period_id: periodId, pending_amount: amount, final_amount: amount, period_end: now.toISOString(), eligible_revenue: calc.eligible, report_hash: reportHash });
-  if (error) throw new Error(error.message);
-  const tx = await send(ctx, "postPool", [BigInt(periodId), BigInt(amount), reportHash]);
-  await ctx.pf.from("pool_periods").update({ posted_tx: tx }).eq("series_id", ctx.series.id).eq("period_id", periodId);
-  await custody(ctx, "investor_pool", amount, `periode-${periodId}`);
-  await audit("platform", "pool.post", { periodId, amount, eligible: calc.eligible, tx });
-  return `Periode ${periodId} final: kantong +${rp(amount)} (${ctx.series.share_bps / 100}% × Eligible Revenue ${rp(calc.eligible)})`;
-}
-
-export async function reconcilePeriod(ctx: Ctx) {
-  const company = needCompany(ctx);
-  const s = await readSeries(chainRef(ctx));
-  const id = Number(s.lastPeriod);
-  if (id < 1) throw new Error("Belum ada periode yang difinalkan");
-  const { data: cur } = await ctx.pf.from("pool_periods").select("*").eq("series_id", ctx.series.id).eq("period_id", id).single();
-  const { data: prev } = await ctx.pf.from("pool_periods").select("*").eq("series_id", ctx.series.id).eq("period_id", id - 1).single();
-  const calc = await eligibleBetween(posDb(), company, new Date(prev!.period_end), new Date(cur!.period_end));
-  const settledIds = new Set(calc.settled.map((p) => p.bookingId));
-  const unmatched = calc.entries.filter((e) => e.type === "sale" && e.bookingId && !settledIds.has(e.bookingId)).map((e) => e.bookingId!);
-  const refs = new Map<string, string>();
-  if (unmatched.length) {
-    const { data } = await posDb().from("bookings").select("id, customer_ref").in("id", unmatched);
-    (data ?? []).forEach((r) => refs.set(r.id, r.customer_ref));
-  }
-  const rec = reconcile({ companyId: company, entries: calc.entries, settled: calc.settled, customerRefs: refs });
-  const clean = rec.exceptions.length === 0;
-  const tx = await send(ctx, "reconcilePeriod", [BigInt(id), clean, refOf(JSON.stringify(rec.exceptions))]);
-  await ctx.pf.from("pool_periods").update({ reconciled: clean }).eq("series_id", ctx.series.id).eq("period_id", id);
-  if (!clean) {
-    await ctx.pf.from("recon_exceptions").insert(rec.exceptions.map((e) => ({ series_id: ctx.series.id, pos_company_id: company, date: e.date, kind: e.kind, amount: e.amount, explained: false })));
-  }
-  await audit("platform", "pool.reconcile", { periodId: id, clean, exceptions: rec.exceptions.length, tx });
-  return clean ? `Periode ${id} terekonsiliasi BERSIH: rilis tahap 2 boleh.` : `Periode ${id}: ${rec.exceptions.length} exception (${rp(rec.unmatchedTotal)} tanpa settlement PSP). Rilis tahap 2 ditahan.`;
-}
-
-export async function approveRedeem(ctx: Ctx, id: bigint) {
-  const ref = chainRef(ctx);
-  await send(ctx, "approveRedeem", [id]);
-  const r: any = await publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "redeems", args: [id] });
-  await ctx.pf.from("redeem_requests").update({ status: "approved", payout: Number(r[2]) }).eq("series_id", ctx.series.id).eq("onchain_id", Number(id));
-  return `Redeem #${id} disetujui: kustodian diminta membayar ${rp(r[2])}`;
-}
-
-export async function confirmRedeem(ctx: Ctx, id: bigint) {
-  const ref = chainRef(ctx);
-  const r: any = await publicClient.readContract({ address: ref.series, abi: seriesAbi, functionName: "redeems", args: [id] });
-  await send(ctx, "confirmRedeem", [id]);
-  await custody(ctx, "investor_pool", -Number(r[2]), `redeem-${id}`);
-  await custody(ctx, "redeem_payout", Number(r[2]), `redeem-${id}`);
-  await ctx.pf.from("redeem_requests").update({ status: "paid" }).eq("series_id", ctx.series.id).eq("onchain_id", Number(id));
-  const s = await readSeries(ref);
-  await ctx.pf.from("series").update({ status: s.state }).eq("id", ctx.series.id);
-  return `Redeem #${id} dibayar (simulasi): token dibakar${s.state === "Closed" ? ". Semua token terbakar: seri Closed, split dimatikan." : ""}`;
-}
-
-export async function failRedeem(ctx: Ctx, id: bigint) {
-  await send(ctx, "failRedeem", [id]);
-  await ctx.pf.from("redeem_requests").update({ status: "failed" }).eq("series_id", ctx.series.id).eq("onchain_id", Number(id));
-  return `Redeem #${id} gagal dibayar: token dibuka kuncinya, angka kantong dikembalikan`;
-}
-
-export async function endTenor(ctx: Ctx) {
-  await send(ctx, "endTenor");
-  await ctx.pf.from("series").update({ status: "Closed" }).eq("id", ctx.series.id);
-  return "Tenor berakhir: seri Closed, split dimatikan. Sisa kantong dibagi lewat redeem.";
-}
-
-
-/** Refund penuh saat penawaran GAGAL (minimum raise tidak tercapai): token dibakar, kustodian (simulasi) mengembalikan rupiah. */
-export async function refundHolder(ctx: Ctx, wallet: Address) {
-  const ref = chainRef(ctx);
-  const s = await readSeries(ref);
-  if (s.state !== "Failed") throw new Error("Refund hanya tersedia bila penawaran gagal (minimum raise tidak tercapai)");
-  const bal = (await publicClient.readContract({ address: ref.token, abi: tokenAbi, functionName: "balanceOf", args: [wallet] })) as bigint;
-  if (bal === 0n) throw new Error("Tidak ada token untuk direfund (mungkin sudah direfund)");
-  const amount = Number(bal * s.unitPrice);
-  const tx = await send(ctx, "refund", [wallet]);
-  await ctx.pf.from("purchases").update({ refunded_at: new Date().toISOString(), refund_tx: tx }).eq("series_id", ctx.series.id).eq("wallet", wallet).eq("status", "minted").is("refunded_at", null);
-  await custody(ctx, "escrow", -amount, `refund-${wallet.slice(0, 8)}`);
-  await custody(ctx, "refund", amount, `refund-${wallet.slice(0, 8)}`);
-  await audit("platform", "series.refund", { wallet, amount, tx });
-  return `Refund ${rp(amount)} diproses: token dibakar dan dana dikembalikan ke investor (kustodian simulasi).`;
-}
-
-/** Staf menjelaskan satu exception (mis. pembayaran tunai yang sah). Tidak mengubah angka on-chain; lihat confirmPeriodClean. */
-export async function explainException(ctx: Ctx, exceptionId: string, by: string, explanation: string) {
-  if (explanation.trim().length < 10) throw new Error("Penjelasan minimal 10 karakter");
-  const { error } = await ctx.pf.from("recon_exceptions").update({ explained: true, explained_by: by, explanation: explanation.trim(), explained_at: new Date().toISOString() }).eq("id", exceptionId).eq("series_id", ctx.series.id);
-  if (error) throw new Error(error.message);
-  await audit(by, "exception.explain", { exceptionId });
-  return "Exception ditandai sudah dijelaskan.";
+  if (!s.spv_approved_at) throw new Error("Grounds (SPV) belum menyetujui pembelian hak ini");
+  const evidenceHash = evidenceHashOf(canonicalJson({ profile: profileHash ?? ctx.venue.public_profile_hash, valuation: s.valuation_id, simulated: true }));
+  const payload = { valuation: String(s.valuation_idr), supply: String(s.supply), refPrice: String(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash };
+  const payloadHash = acquisitionPayload({ valuation: BigInt(s.valuation_idr), supply: BigInt(s.supply), refPrice: BigInt(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash });
+  const att = await createAttestation({ seriesId, kind: "ACQUISITION_CLOSED", refId: 0, payload, payloadHash, evidenceHash, deadline: new Date(Date.now() + ACQUISITION_WINDOW_DAYS * 86_400_000) });
+  await signAsPlatform(att.id, addr);
+  return att.id as string;
 }
 
 /**
- * Setelah SEMUA exception seri ini dijelaskan, tandai periode yang sebelumnya tidak bersih sebagai bersih on-chain
- * (hash penjelasan ikut dicatat) supaya rilis tahap 2 bisa dilakukan.
+ * Owner menandatangani ACQUISITION_CLOSED dengan wallet Privy-nya: "hak ekonomi X% dialihkan dan dana akuisisi diterima (simulasi)".
+ * Begitu dua tanda tangan lengkap, `activate` dikirim: kontrak memeriksa ulang tanda tangan dan mencetak supply sekali ke treasury.
  */
-export async function confirmPeriodClean(ctx: Ctx) {
-  const { data: open } = await ctx.pf.from("recon_exceptions").select("id").eq("series_id", ctx.series.id).eq("explained", false);
-  if (open?.length) throw new Error(`Masih ada ${open.length} exception yang belum dijelaskan`);
-  const { data: bad } = await ctx.pf.from("pool_periods").select("period_id").eq("series_id", ctx.series.id).eq("reconciled", false).order("period_id");
-  if (!bad?.length) throw new Error("Tidak ada periode yang perlu dikonfirmasi");
-  const { data: why } = await ctx.pf.from("recon_exceptions").select("id, explanation, explained_by").eq("series_id", ctx.series.id);
-  const hash = refOf(JSON.stringify(why));
-  for (const p of bad) {
-    await send(ctx, "reconcilePeriod", [BigInt(p.period_id), true, hash]);
-    await ctx.pf.from("pool_periods").update({ reconciled: true }).eq("series_id", ctx.series.id).eq("period_id", p.period_id);
-  }
-  await audit("platform", "pool.confirmClean", { periods: bad.map((p) => p.period_id) });
-  return `Periode ${bad.map((p) => p.period_id).join(", ")} dikonfirmasi bersih setelah penjelasan exception. Rilis tahap 2 boleh dilakukan bila syarat lain terpenuhi.`;
+export async function ownerSignAcquisition(seriesId: string, attId: string, signature: Hex) {
+  const ctx = await getSeries(seriesId);
+  const addr = needContract(ctx);
+  const { att } = await addSignature(attId, addr, signature, { expectSlot: "COUNTERPARTY" });
+  if (!isReady(att)) return "Tanda tangan tersimpan; menunggu tanda tangan platform.";
+  return activateIfReady(seriesId);
 }
 
-/** Hitung Merkle root untuk setiap hari (UTC, sebelum hari ini) yang punya entri ledger tetapi belum punya root. */
-export async function computeMissingRoots(ctx: Ctx) {
-  const company = needCompany(ctx);
-  const db = posDb();
-  const dates = new Set<string>();
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await db.from("ledger_entries").select("created_at").eq("company_id", company).order("seq").range(from, from + 999);
-    if (error) throw new Error(error.message);
-    (data ?? []).forEach((r) => dates.add(utcDate(r.created_at)));
-    if (!data || data.length < 1000) break;
-  }
-  const { data: have } = await db.from("daily_roots").select("date").eq("company_id", company);
-  const done = new Set((have ?? []).map((r) => r.date as string));
-  const today = utcDate(new Date().toISOString());
-  const todo = [...dates].filter((d) => d < today && !done.has(d)).sort();
-  for (const d of todo) await computeDailyRoot(db, company, d);
-  return todo.length ? `${todo.length} root harian baru dihitung.` : "Semua hari yang sudah lewat sudah punya root.";
+export async function activateIfReady(seriesId: string) {
+  const ctx = await getSeries(seriesId);
+  const addr = needContract(ctx);
+  const pf = platformDb();
+  const { data: att } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("status", "collecting").maybeSingle();
+  if (!att || !isReady(att)) throw new Error("Attestation akuisisi belum lengkap");
+  const s = ctx.series;
+  const deadline = BigInt(Math.floor(Date.parse(att.deadline) / 1000));
+  const tx = await operatorSend(addr, venueSeriesAbi as any, "activate", [BigInt(s.valuation_idr), BigInt(s.supply), BigInt(s.ref_price), att.evidence_hash, deadline, sigsOf(att)]);
+  await markSubmitted(att.id, tx);
+  await pf.from("series").update({ status: "Active", activated_tx: tx }).eq("id", seriesId);
+  // pembayaran akuisisi ke owner = S = V × X, dari modal SPV (simulasi, §2.4)
+  await moveCash(seriesId, `acquisition-${seriesId}`, [["owner", Math.floor((Number(s.valuation_idr) * s.stake_bps) / 10_000)]]);
+  await audit("platform", "series.activate", { entity: "series", entityId: seriesId, after: { tx, supply: s.supply, refPrice: s.ref_price } });
+  return `Seri aktif. ${Number(s.supply).toLocaleString("id-ID")} token dicetak sekali ke treasury Grounds.`;
 }
 
-/** Owner menarik bagian dari saldo owner di kustodian (simulasi). */
-export async function ownerAvailable(ctx: Ctx) {
-  const { data } = await ctx.pf.from("custody_ledger").select("amount").eq("series_id", ctx.series.id).eq("account", "owner");
-  return (data ?? []).reduce((a, r) => a + Number(r.amount), 0);
+/** Sinkronkan status seri dari chain (Overdue/Defaulted/Disputed bisa dipicu dari luar platform). */
+export async function syncState(seriesId: string) {
+  const ctx = await getSeries(seriesId);
+  if (!ctx.address) return ctx.series.status;
+  const info = await readSeries(ctx.address);
+  if (info.state !== ctx.series.status) await platformDb().from("series").update({ status: info.state }).eq("id", seriesId);
+  return info.state;
 }
-export async function ownerWithdraw(ctx: Ctx, requestedBy: string, amount: number) {
-  const avail = await ownerAvailable(ctx);
-  if (!Number.isInteger(amount) || amount < 1) throw new Error("Jumlah penarikan tidak valid");
-  if (amount > avail) throw new Error(`Saldo tersedia hanya ${rp(avail)}`);
-  const { error } = await ctx.pf.from("owner_payouts").insert({ series_id: ctx.series.id, amount, requested_by: requestedBy });
-  if (error) throw new Error(error.message);
-  await custody(ctx, "owner", -amount, "penarikan-owner");
-  await audit("owner", "owner.withdraw", { series: ctx.series.id, amount });
-  return `Penarikan ${rp(amount)} diproses ke rekening owner (kustodian simulasi).`;
+
+export async function seriesOfVenue(venueId: string) {
+  const { data } = await platformDb().from("series").select("*").eq("venue_id", venueId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data;
 }
+
+export async function listProducts() {
+  const pf = platformDb();
+  const { data: series } = await pf.from("series").select("*").not("contract_address", "is", null).order("created_at", { ascending: false });
+  const ids = [...new Set((series ?? []).map((s) => s.venue_id))];
+  const { data: venues } = ids.length ? await pf.from("venues").select("id, name, city, province, sports, public_profile, facilities") .in("id", ids) : { data: [] as any[] };
+  const byId = new Map((venues ?? []).map((v) => [v.id, v]));
+  return (series ?? []).map((s) => ({ series: s, venue: byId.get(s.venue_id)! })).filter((x) => x.venue);
+}
+
+export type { Address };

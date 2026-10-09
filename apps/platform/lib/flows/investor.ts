@@ -1,81 +1,118 @@
-import { randomUUID } from "node:crypto";
-import type { Address, Hex } from "viem";
-import { publicClient, readSeries, seriesAbi, tokenAbi } from "../chain";
+import { createHash } from "node:crypto";
+import type { Address } from "viem";
+import { DEMO_PARAMS, kycStateOf, maskNumber, type KycState } from "@venue-rwa/shared";
+import { publicClient, seriesTokenAbi, venueSeriesAbi } from "../chain";
 import { platformDb } from "../db";
-import { audit, chainRef, refOf, type Ctx } from "../flow";
+import { createSession, diditConfig, getDecision } from "../didit";
+import { audit } from "../flow";
 import { operatorSend } from "../operator";
 
-const rp = (n: number | bigint) => "Rp" + Number(n).toLocaleString("id-ID");
-const send = (ctx: Ctx, fn: string, args: unknown[] = []) => operatorSend(chainRef(ctx).series, seriesAbi as any, fn, args);
-
-/** KYC MOCK (simulasi, dilabeli): platform menyimpan status terikat wallet, bukan KTP/selfie. Berlaku lintas seri. */
-export async function mockKyc(wallet: string) {
-  const { error } = await platformDb().from("kyc_status").upsert({ wallet, status: "verified", tier: 1, verified_at: new Date().toISOString(), simulated: true, vendor_ref: "MOCK-KYC" });
-  if (error) throw new Error(error.message);
-}
-
-export async function isKycVerified(wallet: string) {
-  const { data } = await platformDb().from("kyc_status").select("status").eq("wallet", wallet).maybeSingle();
-  return data?.status === "verified";
-}
-
-/** Daftarkan wallet ke allowlist token seri ini (hanya bila KYC platform sudah verified). */
-export async function allowOnchain(ctx: Ctx, wallet: Address) {
-  const ref = chainRef(ctx);
-  if (!(await isKycVerified(wallet))) throw new Error("Selesaikan KYC di halaman Portofolio dulu.");
-  const allowed = (await publicClient.readContract({ address: ref.token, abi: tokenAbi, functionName: "allowed", args: [wallet] })) as boolean;
-  if (!allowed) await send(ctx, "setKyc", [wallet, true]);
-}
-
-/** Beli token: rupiah SIMULASI masuk escrow kustodian, lalu Series mint token ke wallet investor. */
-export async function purchase(ctx: Ctx, wallet: Address, units: number, who = wallet.slice(0, 8)) {
-  const ref = chainRef(ctx);
-  if (ctx.series.status === "Superseded") throw new Error("Seri ini sudah digantikan seri baru; beli di penawaran terbaru");
-  let s = await readSeries(ref);
-  // node RPC bisa tertinggal beberapa detik setelah attestation/pembukaan: baca ulang sekali sebelum menolak
-  if (s.state === "Offering" && !s.attValid) { await new Promise((r) => setTimeout(r, 2500)); s = await readSeries(ref); }
-  if (s.state !== "Offering") throw new Error(`Penawaran tidak sedang dibuka (status ${s.state})`);
-  if (!s.attValid) throw new Error("Attestation tidak valid: pembelian ditolak (bila baru saja dibuka, tunggu beberapa detik lalu coba lagi)");
-  if (!Number.isInteger(units) || units < 1) throw new Error("Jumlah token minimal 1");
-  if (BigInt(units) + s.minted > s.cap) throw new Error(`Melebihi cap: sisa ${(s.cap - s.minted).toString()} token`);
-  await allowOnchain(ctx, wallet);
-  const amount = units * Number(s.unitPrice);
-  const payRef: Hex = refOf(`SIM-PAY-${randomUUID()}`);
-  const { error } = await ctx.pf.from("purchases").insert({ series_id: ctx.series.id, wallet, units, amount, payment_ref: payRef, related_party: false, simulated: true });
-  if (error) throw new Error(error.message);
-  await ctx.pf.from("custody_ledger").insert({ series_id: ctx.series.id, account: "escrow", amount, ref: `beli-${who}`, simulated: true });
-  const tx = await send(ctx, "recordPurchase", [wallet, BigInt(units), payRef, false]);
-  await ctx.pf.from("purchases").update({ mint_tx: tx, custody_confirmed_at: new Date().toISOString() }).eq("payment_ref", payRef);
-  await audit("platform", "purchase", { series: ctx.series.id, wallet, units, amount, tx });
-  return { amount, tx };
-}
-
-export async function buy(ctx: Ctx, wallet: Address, units: number) {
-  const r = await purchase(ctx, wallet, units);
-  const closed = await (await import("./series")).closeIfSoldOut(ctx.series.id).catch(() => null);
-  return `Pembelian ${units} token berhasil (${rp(r.amount)}, rupiah simulasi → escrow → token di-mint ke wallet Anda).${closed ? ` Semua token terjual: ${closed}` : ""}`;
-}
-
-/** Permintaan redeem yang sudah DITANDATANGANI holder (EIP-712, tanpa gas); kontrak memverifikasi tanda tangan dan nonce. */
-export async function requestRedeemSigned(ctx: Ctx, wallet: Address, units: bigint, deadline: bigint, signature: Hex) {
-  const ref = chainRef(ctx);
-  await send(ctx, "requestRedeemFor", [wallet, units, deadline, signature]);
-  const s = await readSeries(ref);
-  await ctx.pf.from("redeem_requests").insert({ series_id: ctx.series.id, onchain_id: Number(s.nextRedeemId), wallet, units: Number(units), status: "pending", simulated: true });
-  return `Permintaan redeem ${units} token diajukan. Token terkunci menunggu kustodian membayar.`;
-}
-
 /**
- * Kirim token ke pemegang ber-KYC lain. Pengirim menandatangani (EIP-712, tanpa gas); operator meneruskan.
- * Penerima harus sudah lolos KYC di platform. Pembayaran antar pihak (jika ada) terjadi di luar platform: platform tidak menetapkan harga.
+ * Investor: KYC (Didit, atau mock berlabel bila DIDIT_* kosong), rekening bank atas nama sendiri (nama = nama KYC),
+ * allowlist on-chain per seri. Platform tidak menyimpan KTP/selfie; nama KYC disimpan untuk pencocokan rekening (staf saja).
  */
-export async function transferSigned(ctx: Ctx, from: Address, to: Address, units: bigint, deadline: bigint, signature: Hex) {
-  const ref = chainRef(ctx);
-  if (from.toLowerCase() === to.toLowerCase()) throw new Error("Tidak bisa mengirim ke wallet sendiri");
-  if (!(await isKycVerified(to))) throw new Error("Wallet penerima belum lolos KYC di platform");
-  await allowOnchain(ctx, to);
-  const tx = await send(ctx, "transferFor", [from, to, units, deadline, signature]);
-  await ctx.pf.from("token_transfers").insert({ series_id: ctx.series.id, from_wallet: from, to_wallet: to, units: Number(units), tx });
-  await audit("platform", "token.transfer", { series: ctx.series.id, from, to, units: Number(units), tx });
-  return `${units} token terkirim ke ${to.slice(0, 8)}… (tx ${tx.slice(0, 12)}…).`;
+
+export async function kycOf(userId: string) {
+  const { data } = await platformDb().from("kyc_records").select("*").eq("user_id", userId).maybeSingle();
+  return data;
+}
+export const isVerified = (k: { status: string } | null | undefined) => k?.status === "verified";
+
+/** Mock KYC (sandbox): hanya bila Didit tidak dikonfigurasi. Dilabeli di UI. */
+export async function mockKyc(userId: string, wallet: string | null, fullName: string) {
+  if (diditConfig().configured) throw new Error("KYC memakai Didit; mock tidak tersedia");
+  const name = fullName.trim().replace(/\s+/g, " ");
+  if (name.length < 3) throw new Error("Nama lengkap minimal 3 karakter");
+  await platformDb().from("kyc_records").upsert({ user_id: userId, wallet, status: "verified", full_name: name, provider: "mock", verified_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  await audit(userId, "kyc.mock_verified", { entity: "kyc_records", entityId: userId });
+}
+
+export async function startDiditKyc(userId: string, wallet: string | null, origin: string) {
+  const base = process.env.PLATFORM_URL || origin;
+  const s = await createSession({ vendorData: userId, callback: `${base}/portfolio?kyc=return` });
+  const { error } = await platformDb().from("kyc_sessions").insert({ user_id: userId, wallet, session_id: s.session_id, url: s.url, status: s.status, state: kycStateOf(s.status) });
+  if (error) throw new Error(error.message);
+  return s.url;
+}
+
+/** Terapkan status sesi Didit. Idempoten; tidak pernah menurunkan status verified. */
+export async function applyDiditStatus(sessionId: string, status: string, eventId?: string, fullName?: string | null): Promise<KycState | null> {
+  const db = platformDb();
+  const { data: row } = await db.from("kyc_sessions").select("*").eq("session_id", sessionId).maybeSingle();
+  if (!row) return null;
+  if (eventId && row.event_id === eventId) return row.state as KycState;
+  const state = kycStateOf(status);
+  if (row.state === "verified" && state !== "verified") return "verified";
+  await db.from("kyc_sessions").update({ status, state, event_id: eventId ?? row.event_id, updated_at: new Date().toISOString() }).eq("id", row.id);
+  if (state === "verified" || state === "rejected") {
+    await db.from("kyc_records").upsert({
+      user_id: row.user_id, wallet: row.wallet, status: state, full_name: fullName ?? null, provider: "didit", vendor_ref: sessionId,
+      verified_at: state === "verified" ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
+    });
+    await audit("platform", `kyc.${state}`, { entity: "kyc_records", entityId: row.user_id });
+  }
+  return state;
+}
+
+export async function syncDiditKyc(userId: string) {
+  if (!diditConfig().configured) return null;
+  const { data: row } = await platformDb().from("kyc_sessions").select("session_id, state").eq("user_id", userId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!row || row.state === "verified") return row?.state ?? null;
+  const d: any = await getDecision(row.session_id);
+  const idv = d.id_verification ?? d.id_verifications?.[0] ?? {};
+  const name = idv.full_name ?? ([idv.first_name, idv.last_name].filter(Boolean).join(" ") || null);
+  return applyDiditStatus(row.session_id, d.status, undefined, name);
+}
+
+// ---------------------------------------------------------------- rekening bank (§3.6.3)
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+/** Pencocokan nama pemilik rekening dengan nama KYC (mock: perbandingan teks; layanan cek nama bank belum terverifikasi). */
+export const namesMatch = (a: string, b: string) => norm(a) === norm(b);
+
+export async function activeBankAccount(userId: string) {
+  const { data } = await platformDb().from("investor_bank_accounts").select("*").eq("user_id", userId).in("status", ["verified", "cooling_off"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (data?.status === "cooling_off" && data.cooling_until && Date.parse(data.cooling_until) <= Date.now()) {
+    await platformDb().from("investor_bank_accounts").update({ status: "verified" }).eq("id", data.id);
+    data.status = "verified";
+  }
+  return data;
+}
+
+/** Daftarkan/ganti rekening. Nama harus sama dengan nama KYC. Ganti rekening = cooling-off 48 jam (penarikan ditahan). */
+export async function registerBankAccount(userId: string, a: { bank: string; accountNumber: string; holderName: string }) {
+  const kyc = await kycOf(userId);
+  if (!isVerified(kyc)) throw new Error("Selesaikan KYC dulu");
+  if (!/^\d{6,20}$/.test(a.accountNumber)) throw new Error("Nomor rekening 6–20 digit");
+  if (a.bank.trim().length < 2) throw new Error("Nama bank wajib diisi");
+  const match = kyc!.full_name ? namesMatch(a.holderName, kyc!.full_name) : false;
+  const pf = platformDb();
+  const prev = await activeBankAccount(userId);
+  if (!match) {
+    await pf.from("investor_bank_accounts").insert({ user_id: userId, bank: a.bank.trim(), account_masked: maskNumber(a.accountNumber), account_hash: sha(a.accountNumber), holder_name: a.holderName.trim(), name_matches: false, status: "rejected" });
+    throw new Error(kyc!.full_name ? "Nama pemilik rekening tidak sama dengan nama KYC. Rekening harus atas nama Anda sendiri." : "Nama KYC tidak tersedia dari penyedia; hubungi tim.");
+  }
+  const cooling = !!prev;
+  if (prev) await pf.from("investor_bank_accounts").update({ status: "replaced" }).eq("id", prev.id);
+  await pf.from("investor_bank_accounts").insert({
+    user_id: userId, bank: a.bank.trim(), account_masked: maskNumber(a.accountNumber), account_hash: sha(a.accountNumber), holder_name: a.holderName.trim(), name_matches: true,
+    status: cooling ? "cooling_off" : "verified", cooling_until: cooling ? new Date(Date.now() + DEMO_PARAMS.bankCoolingHours * 3_600_000).toISOString() : null,
+  });
+  await audit(userId, cooling ? "bank.replace" : "bank.register", { entity: "investor_bank_accounts", entityId: userId, after: { bank: a.bank, masked: maskNumber(a.accountNumber) } });
+  return cooling ? `Rekening diganti. Penarikan ditahan ${DEMO_PARAMS.bankCoolingHours} jam (masa tunggu keamanan).` : "Rekening terverifikasi (nama cocok dengan KYC).";
+}
+const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** Syarat sebelum membeli: wallet, KYC, rekening terverifikasi. Lempar Error dengan langkah yang kurang. */
+export async function assertCanBuy(me: { userId: string; wallet: string | null }) {
+  if (!me.wallet) throw new Error("Wallet Anda belum siap. Tunggu sebentar di halaman Portofolio.");
+  if (!isVerified(await kycOf(me.userId))) throw new Error("Selesaikan KYC di halaman Portofolio dulu.");
+  if (!(await activeBankAccount(me.userId))) throw new Error("Daftarkan rekening bank atas nama Anda di halaman Portofolio dulu.");
+}
+
+/** Allowlist on-chain (isVerified) untuk wallet investor di satu seri. Idempoten. */
+export async function allowOnchain(series: Address, token: Address, wallet: Address) {
+  const ok = await publicClient.readContract({ address: token, abi: seriesTokenAbi, functionName: "isVerified", args: [wallet] });
+  if (ok) return null;
+  return operatorSend(series, venueSeriesAbi as any, "setVerified", [wallet, true]);
 }

@@ -5,8 +5,8 @@ import { userClient } from "@/lib/supabase";
 const out = (token: string | null, status = 200) => NextResponse.json({ token, retry: status === 503 }, { status, headers: { "cache-control": "no-store" } });
 
 /**
- * Access token Supabase milik investor yang sedang login, untuk ditukar Privy (custom auth) menjadi wallet milik pengguna itu.
- * 401 = memang bukan investor yang login; 503 = Supabase tidak terjangkau sesaat (klien mencoba ulang).
+ * Access token Supabase milik investor/owner yang sedang login, untuk ditukar Privy (custom auth) menjadi wallet milik pengguna itu.
+ * 401 = memang bukan investor/owner yang login; 503 = Supabase tidak terjangkau sesaat (klien mencoba ulang).
  */
 export async function GET() {
   try {
@@ -19,7 +19,7 @@ export async function GET() {
     if (!data.user) return out(null, 401);
     const { data: row, error: e2 } = await platformDb().from("users").select("role").eq("auth_user_id", data.user.id).maybeSingle();
     if (e2) return out(null, 503);
-    if (row?.role !== "investor") return out(null, 401);
+    if (row?.role !== "investor" && row?.role !== "owner") return out(null, 401);
     const { data: s } = await sb.auth.getSession();
     return s.session?.access_token ? out(s.session.access_token) : out(null, 503);
   } catch {
