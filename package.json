@@ -1,0 +1,17 @@
+{
+  "name": "venue-rwa",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Tokenisasi hak atas pendapatan venue olahraga + Venue OS (POS). ETHJKT 2026, RWA track, Sepolia.",
+  "packageManager": "pnpm@10.34.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:contracts": "cd packages/contracts && forge test -vvv",
+    "dev:pos": "pnpm --filter @venue-rwa/pos dev",
+    "dev:platform": "pnpm --filter @venue-rwa/platform dev"
+  }
+}
