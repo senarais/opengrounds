@@ -47,9 +47,9 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
             <tr><td>refund / chargeback</td><td>entri <b>negatif</b> baru</td></tr>
             <tr><td>tax</td><td>PB1 (pengurang)</td></tr>
             <tr><td>fee</td><td>biaya gateway (pengurang)</td></tr>
-            <tr><td>Eligible Revenue</td><td>sale − refund − chargeback − tax − fee</td></tr>
+            <tr><td>Omzet bersih transaksi</td><td>sale − refund − chargeback − tax − fee</td></tr>
           </tbody></table>
-          <p className="muted small mt-s">Dasar bagi hasil adalah <b>omzet</b>, bukan laba: omzet bisa dibuktikan dari gateway, sedangkan laba bergantung biaya yang dikontrol owner.</p>
+          <p className="muted small mt-s">Ledger ini adalah bukti <b>omzet kotor, refund, dan pajak</b> untuk waterfall bulanan di Open Grounds. Hak investor dihitung dari <b>laba bersih yang bisa dibagikan</b> (setelah biaya, fee operator, cadangan, dan fee platform), bukan dari omzet.</p>
         </Card>
       </div>
 

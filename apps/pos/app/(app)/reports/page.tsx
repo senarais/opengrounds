@@ -42,18 +42,18 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
 
   return (
     <>
-      <PageHeader eyebrow="Laporan" title="Omzet, okupansi, dan selisih vs settlement" lead="Angka di sini dihitung dari ledger dan dicocokkan dengan settlement PSP. Penjualan tanpa settlement tidak dihitung sebagai Eligible Revenue." />
+      <PageHeader eyebrow="Laporan" title="Omzet, okupansi, dan selisih vs settlement" lead="Angka di sini dihitung dari ledger dan dicocokkan dengan settlement PSP. Penjualan tanpa settlement tidak dihitung sebagai omzet terverifikasi." />
       <Flash ok={sp.ok} err={sp.err} />
 
       <div className="grid c4">
         <Kpi label="Penjualan kotor 30 hari" value={rp(gross)} />
         <Kpi label="Refund" value={rp(refunds)} hint={`${pct(gross ? refunds / gross : 0, 1)} dari penjualan`} />
-        <Kpi label="Eligible Revenue" value={rp(eligible)} hint="dasar bagi hasil" accent />
+        <Kpi label="Omzet bersih" value={rp(eligible)} hint="bahan waterfall; bukan laba" accent />
         <Kpi label="Cakupan terverifikasi" value={pct(rec.coverage)} hint="penjualan settle di gateway ÷ semua penjualan" />
       </div>
 
       <div className="grid c2 mt">
-        <Card title="Eligible Revenue per 30 hari" subtitle="Hanya penjualan yang settle di PSP.">
+        <Card title="Omzet bersih per 30 hari" subtitle="Hanya penjualan yang settle di PSP.">
           <Bars rows={monthly.map((m, i) => ({ label: `${(monthly.length - 1 - i) * 30}–${(monthly.length - i) * 30}h`, value: m, display: rp(m) }))} />
         </Card>
         <Card title="Penjualan harian" subtitle="14 hari terakhir (UTC).">

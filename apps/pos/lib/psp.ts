@@ -29,13 +29,13 @@ const simulated: PspAdapter = {
 };
 
 /**
- * Aturan pemisahan dana (xenPlatform split rule): persen dari setiap pembayaran diarahkan ke akun tujuan (kantong investor).
+ * Aturan pemisahan dana (xenPlatform split rule): persen dari setiap pembayaran diarahkan ke akun tujuan (kantong SPV, s% dari omzet).
  * BELUM TERVERIFIKASI: akun Xendit kita belum punya akses xenPlatform (lihat docs/XENDIT.md). Bentuk request mengikuti dokumentasi
  * resmi dan hanya diuji dengan fetch palsu; jangan diaktifkan sebelum xenPlatform aktif dan dicoba di test mode.
  */
 export function splitRuleBody(a: { name: string; percent: number; destinationAccountId: string; reference: string }) {
   if (!(a.percent > 0 && a.percent <= 100)) throw new Error("persen split harus di antara 0 dan 100");
-  return { name: a.name.slice(0, 100), description: `Bagian investor ${a.percent}%`, routes: [{ percent_amount: a.percent, currency: "IDR", destination_account_id: a.destinationAccountId, reference_id: a.reference }] };
+  return { name: a.name.slice(0, 100), description: `Kantong SPV ${a.percent}%`, routes: [{ percent_amount: a.percent, currency: "IDR", destination_account_id: a.destinationAccountId, reference_id: a.reference }] };
 }
 
 export const splitEnabled = () => process.env.XENDIT_SPLIT === "on";

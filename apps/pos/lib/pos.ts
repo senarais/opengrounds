@@ -128,7 +128,7 @@ export async function settlePayment(db: AppClient, ref: { payToken?: string; psp
 }
 
 /**
- * Beri tahu platform bahwa ada pembayaran yang settle, supaya bagian investor langsung diposting ke kantong (bila penawaran terdanai).
+ * Beri tahu platform bahwa ada pembayaran yang settle, supaya split s% ke kantong SPV dicatat (MockPaymentProvider, sandbox).
  * Tidak ditunggu dan tidak pernah menggagalkan pelunasan: platform tidak terjangkau = diposting pada pembayaran berikutnya.
  */
 function notifyPlatform(companyId: string) {

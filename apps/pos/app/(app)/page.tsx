@@ -43,7 +43,7 @@ export default async function Dashboard() {
       <div className="grid c4">
         <Kpi label="Penjualan hari ini" value={rp(salesToday)} hint={`${active.length} sesi terpesan dari ${totalSlots}`} accent />
         <Kpi label="Penjualan 30 hari" value={rp(sales30)} hint={`Okupansi ${pct(occ30)}`} />
-        <Kpi label="Eligible Revenue 30 hari" value={rp(eligible30)} hint="settle − refund − pajak − fee" />
+        <Kpi label="Omzet bersih 30 hari" value={rp(eligible30)} hint="settle − refund − pajak − fee gateway" />
         <Kpi label="Produk aktif" value={products?.length ?? 0} hint="lapangan / fasilitas" />
       </div>
 
