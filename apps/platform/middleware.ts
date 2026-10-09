@@ -16,7 +16,13 @@ export async function middleware(req: NextRequest) {
       },
     },
   });
-  const { data: { user } } = await supabase.auth.getUser();
+  let user: unknown = null;
+  try {
+    ({ data: { user } } = await supabase.auth.getUser());
+  } catch {
+    // Supabase tidak terjangkau sesaat (jaringan). Jangan jatuhkan halaman: pengecekan login yang sebenarnya ada di halaman (requireOwner/requireArea/getMe).
+    return res;
+  }
   const path = req.nextUrl.pathname;
   if (!user && PROTECTED.some((p) => path === p || path.startsWith(p + "/"))) {
     const url = new URL("/login", req.url);

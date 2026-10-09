@@ -130,7 +130,7 @@ export function ConnectWalletButton({ authId, chainId }: { authId: string; chain
         setBusy(true); setMsg("");
         try {
           const address = await connect(chainId);
-          const message = `Hubungkan wallet ke Venue RWA\nAkun: ${authId}\nWaktu: ${new Date().toISOString()}`;
+          const message = `Hubungkan wallet ke OpenGrounds\nAkun: ${authId}\nWaktu: ${new Date().toISOString()}`;
           const signature = await window.ethereum.request({ method: "personal_sign", params: [message, address] });
           const res = await fetch("/api/wallet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address, message, signature }) });
           const j = await res.json();

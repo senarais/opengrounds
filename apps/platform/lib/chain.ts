@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createPublicClient, http, parseAbi, type Address } from "viem";
 import { foundry, sepolia } from "viem/chains";
@@ -10,14 +10,18 @@ function deployments(): { Series: Address; SeriesToken: Address; AssetAttestatio
     const zero = "0x0000000000000000000000000000000000000000" as Address;
     return { Series: (process.env.SERIES_ADDRESS as Address) ?? zero, SeriesToken: (process.env.TOKEN_ADDRESS as Address) ?? zero, AssetAttestation: process.env.ATTESTATION_ADDRESS as Address, chainId: Number(process.env.CHAIN_ID ?? 11155111) };
   }
-  return JSON.parse(readFileSync(join(process.cwd(), "../../packages/contracts/deployments/latest.json"), "utf8"));
+  // Dibaca ulang bila file berubah (mtime): server yang sedang jalan tidak boleh memegang alamat registry lama setelah deploy ulang.
+  const path = join(process.cwd(), "../../packages/contracts/deployments/latest.json");
+  const mtime = statSync(path).mtimeMs;
+  if (!fileCache || fileCache.mtime !== mtime) fileCache = { mtime, v: JSON.parse(readFileSync(path, "utf8")) };
+  return fileCache.v;
 }
+let fileCache: { mtime: number; v: ReturnType<typeof deployments> } | null = null;
 
-export const dep = deployments();
 /** Registry attestation dipakai bersama semua seri. Seri dan token diturunkan per pengajuan (lihat SeriesRef). */
-export const ADDR = { attestation: dep.AssetAttestation };
+export const ADDR = { get attestation(): Address { return deployments().AssetAttestation; } };
 /** Seri demo bawaan (deployments/latest.json), dipakai bootstrap untuk perusahaan "Ayo". */
-export const LEGACY_SERIES = { series: dep.Series, token: dep.SeriesToken };
+export const LEGACY_SERIES = { get series(): Address { return deployments().Series; }, get token(): Address { return deployments().SeriesToken; } };
 export interface SeriesRef { series: Address; token: Address }
 export const etherscan = (a: string) => `https://sepolia.etherscan.io/address/${a}`;
 export const etherscanTx = (h: string) => `https://sepolia.etherscan.io/tx/${h}`;
@@ -51,6 +55,7 @@ export const seriesAbi = [...contractErrors, ...parseAbi([
   "function S() view returns (uint256)",
   "function lastPeriod() view returns (uint64)",
   "function offeringEnd() view returns (uint64)",
+  "function offeringDuration() view returns (uint32)",
   "function tenorEnd() view returns (uint64)",
   "function nextRedeemId() view returns (uint256)",
   "function redeemValuePerToken() view returns (uint256)",
