@@ -15,3 +15,7 @@ packages/contracts/lib
 *.keystore
 .next-test
 *.tsbuildinfo
+# dibuat otomatis oleh next dev (Next 16)
+apps/*/AGENTS.md
+# dokumen kerja lokal (PRD, rencana, contoh data): tidak ikut git
+docs/
