@@ -2,15 +2,17 @@ import { describe, expect, it } from "vitest";
 import { parseCsv, parseSalesTable, SALES_TEMPLATE_MONTHLY } from "../src";
 
 const NOW = new Date("2026-10-08T03:00:00Z"); // Oktober 2026 (bulan berjalan, tidak dihitung)
-const monthly = (rows: string[]) => parseSalesTable(parseCsv(["bulan,bruto,refund,pajak,fee", ...rows].join("\n")), NOW);
+const HEAD = "bulan,bruto,refund,biaya_operasional,pajak,fee_operator,cadangan,fee_platform,omzet_digital";
+/** Baris singkat "bulan,bruto,refund,pajak,fee" diperluas ke kolom template baru (biaya lain 0, omzet digital = bruto). */
+const row = (r: string) => { const [m, g, rf, tx, fee] = r.split(","); return [m, g, rf, "0", tx, fee, "0", "0", g].join(","); };
+const monthly = (rows: string[]) => parseSalesTable(parseCsv([HEAD, ...rows.map(row)].join("\n")), NOW);
 
 describe("data penjualan: template bulanan", () => {
-  it("6 bulan berurutan diterima; omzet bersih = bruto − refund − pajak − fee", () => {
+  it("6 bulan berurutan diterima; komponen waterfall terbaca", () => {
     const r = monthly(["2026-03,100000000,1000000,9000000,700000", "2026-04,100000000,0,9000000,0", "2026-05,100000000,0,0,0", "2026-06,100000000,0,0,0", "2026-07,100000000,0,0,0", "2026-08,100000000,0,0,0"]);
     expect(r.errors).toEqual([]);
     expect(r.labels).toEqual(["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]);
-    expect(r.months[0]).toBe(100_000_000 - 1_000_000 - 9_000_000 - 700_000);
-    expect(r.paymentMix).toBeNull();
+    expect(r.months[0]).toMatchObject({ month: "2026-03", gross: 100_000_000, refunds: 1_000_000, tax: 9_000_000, operatorFee: 700_000, digitalGross: 100_000_000 });
   });
   it("bulan berjalan tidak dihitung; kurang dari 6 bulan ditolak", () => {
     const r = monthly(["2026-08,1,0,0,0", "2026-09,1,0,0,0", "2026-10,5,0,0,0"]);
@@ -35,7 +37,7 @@ describe("data penjualan: template bulanan", () => {
 
 describe("data penjualan: ekspor transaksi", () => {
   const head = "ref,tanggal,jumlah,tipe,metode,psp_ref,biaya,pajak,ref_asal";
-  it("dijumlah per bulan WIB; porsi pembayaran dari metode; pajak/fee diperkirakan dan diberi catatan", () => {
+  it("dijumlah per bulan WIB; omzet digital dari metode; pajak diperkirakan dan diberi catatan", () => {
     const rows = [head];
     for (let m = 3; m <= 8; m++) {
       const mm = String(m).padStart(2, "0");
@@ -47,12 +49,11 @@ describe("data penjualan: ekspor transaksi", () => {
     expect(r.errors).toEqual([]);
     expect(r.mode).toBe("transactions");
     expect(r.labels.length).toBe(6);
-    expect(r.paymentMix).toEqual({ gatewayPct: 50, cashPct: 50, transferPct: 0 });
-    const aug = r.breakdown[5]!;
+    const aug = r.months[5]!;
     expect(aug.gross).toBe(220_000);
-    expect(aug.refund).toBe(110_000);
+    expect(aug.digitalGross).toBe(110_000);
+    expect(aug.refunds).toBe(110_000);
     expect(aug.tax).toBe(20_000); // 2 × 110000/11
-    expect(aug.fee).toBe(770); // 0,7% × 110000 hanya gateway
     expect(r.notes.join(" ")).toContain("Pajak diperkirakan");
   });
   it("transaksi 1 Oktober 00:30 WIB jatuh ke Oktober (bulan berjalan, tidak dihitung); 30 September 23:30 WIB ke September", () => {

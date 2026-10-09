@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   ZERO_HASH,
-  applyRedeem,
   eligibleRevenue,
   ledgerEntryHash,
-  maxAllowedPrice,
   merkleProof,
   merkleRoot,
-  priceBand,
-  redeemPayout,
-  referencePrice,
   verifyHashChain,
   verifyMerkleProof,
-  OfferingTerms,
 } from "../src";
 import type { Hex } from "viem";
 
@@ -54,38 +48,4 @@ describe("merkle", () => {
     expect(verifyMerkleProof(merkleProof(leaves, 0), root, leaves[1]!)).toBe(false);
   });
   it("kosong = zero hash", () => expect(merkleRoot([])).toBe(ZERO_HASH));
-});
-
-describe("redeem math", () => {
-  it("membulatkan ke bawah dan menjaga R <= P", () => {
-    const p = { P: 1_000n, R: 0n, S: 3n };
-    expect(redeemPayout(p, 1n)).toBe(333n);
-    const { next } = applyRedeem(p, 1n);
-    expect(next).toEqual({ P: 1000n, R: 333n, S: 2n });
-    expect(next.R <= next.P).toBe(true);
-  });
-  it("tebus semua = ambil seluruh sisa kantong", () => {
-    expect(redeemPayout({ P: 1000n, R: 0n, S: 3n }, 3n)).toBe(1000n);
-  });
-});
-
-describe("harga referensi (contoh PRD)", () => {
-  it("omzet 100jt, haircut 10%, 10% x 24 bln, 10.000 token, margin 30%", () => {
-    const ref = referencePrice({ monthlyMedianRevenue12m: 100_000_000, haircut: 0.1, shareBps: 1000, tenorMonths: 24, tokenSupply: 10_000, minInvestorMargin: 0.3 });
-    expect(ref).toBe(16_615); // ≈ Rp16.600
-  });
-  it("pita harga 10/25", () => {
-    expect(priceBand(10_000, 10_000)).toBe("ok");
-    expect(priceBand(11_000, 10_000)).toBe("ok");
-    expect(priceBand(11_500, 10_000)).toBe("needs_reviewer");
-    expect(priceBand(12_600, 10_000)).toBe("rejected");
-    expect(priceBand(9_000, 10_000)).toBe("ok_below_reference_warning");
-    expect(maxAllowedPrice(10_000)).toBe(12_500);
-  });
-});
-
-describe("offering terms", () => {
-  it("minRaise tidak boleh > target", () => {
-    expect(OfferingTerms.safeParse({ target: 100, minRaise: 200, unitPrice: 10, shareBps: 1000, tenorDays: 365 }).success).toBe(false);
-  });
 });

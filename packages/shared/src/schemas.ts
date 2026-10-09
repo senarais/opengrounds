@@ -87,44 +87,7 @@ export const SettlementEvent = z.object({
 });
 export type SettlementEvent = z.infer<typeof SettlementEvent>;
 
-// ---------- Verifikasi / attestation ----------
-export const Verdict = z.enum(["pass", "fail"]);
-export type Verdict = z.infer<typeof Verdict>;
-/** Angka on-chain: 1 = pass, 2 = fail (0 = tidak ada). */
-export const VERDICT_CODE = { pass: 1, fail: 2 } as const;
-
-export const AttestationInput = z.object({
-  series: EvmAddress,
-  assetId: Hex32,
-  verdict: Verdict,
-  aiRecommendation: Verdict,
-  score: z.number().int().min(0).max(10000),
-  evidenceRoot: Hex32,
-  rulesetHash: Hex32,
-  maxPrice: PositiveRupiah,
-  maxShareBps: z.number().int().min(1).max(10000),
-  maxTotalShareBps: z.number().int().min(1).max(10000),
-  expiry: z.number().int().positive(),
-  overrideReasonHash: Hex32,
-  nonce: z.number().int().nonnegative(),
-});
-export type AttestationInput = z.infer<typeof AttestationInput>;
-
-/** Output ekstraksi dokumen (divalidasi skema; tiap angka menunjuk sumber). */
-export const SourcedNumber = z.object({
-  value: z.number(),
-  source: z.object({ documentId: z.string(), page: z.number().int().positive(), quote: z.string().max(300) }),
-});
-export const OwnerDossier = z.object({
-  leaseMonthsRemaining: SourcedNumber,
-  monthlyBankInstallment: SourcedNumber,
-  bankCovenantForbidsRevenueSale: z.boolean(),
-  bankConsentLetter: z.boolean(),
-  activeLandDispute: z.boolean(),
-  gatewayMonthsOfHistory: z.number().int().nonnegative(),
-});
-export type OwnerDossier = z.infer<typeof OwnerDossier>;
-
+// ---------- Rekonsiliasi ----------
 export const ExceptionKind = z.enum(["unexplained_gap", "cash_outside_system", "fictitious_booking", "hash_chain_broken"]);
 export const ReconException = z.object({
   id: z.string(),
@@ -136,21 +99,10 @@ export const ReconException = z.object({
 });
 export type ReconException = z.infer<typeof ReconException>;
 
-// ---------- Penawaran ----------
-export const SeriesStatus = z.enum(["Draft", "Verifying", "Attested", "Offering", "Funded", "Failed", "Active", "Closed", "Superseded"]);
+// ---------- Seri (PRD v4.1 §5.1; urutan = enum State di VenueSeries.sol) ----------
+export const SERIES_STATES = ["Draft", "Verified", "Active", "Disputed", "Overdue", "Defaulted", "Liquidating", "Closed"] as const;
+export const SeriesStatus = z.enum(SERIES_STATES);
 export type SeriesStatus = z.infer<typeof SeriesStatus>;
-
-export const OfferingTerms = z
-  .object({
-    target: PositiveRupiah,
-    minRaise: PositiveRupiah,
-    unitPrice: PositiveRupiah,
-    shareBps: z.number().int().min(1).max(10000), // 1000 = 10%
-    tenorDays: z.number().int().min(30).max(36 * 31),
-  })
-  .refine((t) => t.minRaise <= t.target, "minRaise harus <= target")
-  .refine((t) => t.unitPrice <= t.target, "unitPrice harus <= target");
-export type OfferingTerms = z.infer<typeof OfferingTerms>;
 
 export const KycStatus = z.object({
   wallet: EvmAddress,

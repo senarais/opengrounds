@@ -1,41 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { ApplicationInput, buildDisclosure, canonicalJson, disclosureHash } from "../src";
-import { testApplication } from "./fixtures";
+import { OnboardingInput, buildDisclosure, canonicalJson, disclosureHash, valuation } from "../src";
+import { testOnboarding } from "./fixtures";
 
-const input: ApplicationInput = ApplicationInput.parse(testApplication({ dossier: { ...testApplication().dossier, monthlyBankInstallment: 6_000_000 } }));
-const docs = [{ kind: "lease", sha256: "aa" }, { kind: "bank_statement", sha256: "bb" }];
+const input: OnboardingInput = OnboardingInput.parse(testOnboarding());
+const val = { ...valuation({ assetValue: 2_400_000_000, d12: 180_000_000, requiredYieldBps: 900, stakeBps: 5000, tokenPrice: 10_000, yieldMinBps: 500, yieldMaxBps: 2000 }), assetValue: 2_400_000_000, d12: 180_000_000, requiredYieldBps: 900 };
+const docs = [{ kind: "land_certificate", sha256: "aa" }, { kind: "bank_statement", sha256: "bb" }];
 
 describe("disclosure pack", () => {
   it("hash deterministik dan tidak bergantung urutan dokumen/olahraga", () => {
-    const two = { ...input, company: { ...input.company, sports: ["padel", "futsal"] } };
-    const a = disclosureHash(buildDisclosure(two, docs));
-    const b = disclosureHash(buildDisclosure({ ...input, company: { ...input.company, sports: ["futsal", "padel"] } }, [...docs].reverse()));
+    const a = disclosureHash(buildDisclosure({ ...input, venue: { ...input.venue, sports: ["padel", "futsal"] } }, val, docs));
+    const b = disclosureHash(buildDisclosure({ ...input, venue: { ...input.venue, sports: ["futsal", "padel"] } }, val, [...docs].reverse()));
     expect(a).toBe(b);
   });
-  it("hash berubah bila data publik berubah (harga, tarif, kinerja, risiko)", () => {
-    const base = disclosureHash(buildDisclosure(input, docs));
-    expect(disclosureHash(buildDisclosure({ ...input, offering: { ...input.offering, unitPrice: 16_000 } }, docs))).not.toBe(base);
-    expect(disclosureHash(buildDisclosure({ ...input, company: { ...input.company, tariffNote: "naik" } }, docs))).not.toBe(base);
-    expect(disclosureHash(buildDisclosure({ ...input, dossier: { ...input.dossier, activeLandDispute: true } }, docs))).not.toBe(base);
+  it("hash berubah bila data publik, alamat persis, atau dokumen berubah", () => {
+    const base = disclosureHash(buildDisclosure(input, val, docs));
+    expect(disclosureHash(buildDisclosure(input, { ...val, refPrice: 11_000 }, docs))).not.toBe(base);
+    expect(disclosureHash(buildDisclosure({ ...input, land: { ...input.land, encumbered: true } }, val, docs))).not.toBe(base);
+    expect(disclosureHash(buildDisclosure({ ...input, venue: { ...input.venue, address: "Jl. Lain No. 1, Bandung" } }, val, docs))).not.toBe(base);
+    expect(disclosureHash(buildDisclosure(input, val, [{ kind: "land_certificate", sha256: "cc" }, docs[1]!]))).not.toBe(base);
   });
-  it("hash berubah bila alamat persis atau dokumen berubah (terikat walau tidak terbuka)", () => {
-    const base = disclosureHash(buildDisclosure(input, docs));
-    expect(disclosureHash(buildDisclosure({ ...input, company: { ...input.company, address: "Jl. Lain No. 1" } }, docs))).not.toBe(base);
-    expect(disclosureHash(buildDisclosure(input, [{ kind: "lease", sha256: "cc" }, docs[1]!]))).not.toBe(base);
-  });
-  it("pack publik tidak memuat alamat persis, KTP, rekening, atau data pelanggan", () => {
-    const d = buildDisclosure(input, docs);
-    const json = JSON.stringify(d.public);
-    expect(json).not.toContain("Jl. Contoh");
-    for (const banned of ["ktp", "nik", "rekening", "customer", "pelanggan", "1234567890", "budi", "accountnumber", "kelurahan", "40135", "contactphone", "contactemail"]) expect(json.toLowerCase()).not.toContain(banned.toLowerCase());
-    expect(json).toContain("Coblong"); // kecamatan publik
-    expect(JSON.stringify(d.sensitive)).toContain("40135");
-  });
-  it("rasio cicilan terhadap omzet dihitung dari rata-rata omzet", () => {
-    expect(buildDisclosure(input, docs).public.risk.installmentToRevenuePct).toBeCloseTo((6_000_000 / 114_166_666.67) * 100, 0);
-  });
-  it("pernyataan pihak terkait wajib dijelaskan", () => {
-    expect(ApplicationInput.safeParse({ ...input, dossier: { ...input.dossier, relatedParty: true, relatedPartyNote: "" } }).success).toBe(false);
+  it("pack publik memuat rumus valuasi, tetapi tidak memuat NIB, NPWP, sertifikat, identitas, rekening, alamat persis", () => {
+    const d = buildDisclosure(input, val, docs);
+    const json = JSON.stringify(d.public).toLowerCase();
+    for (const banned of ["1234567890123", "123456789012345", "10.20.30.40", "3273010101900001", "budi", "1234567890", "jl. contoh", "pt lapangan"]) expect(json).not.toContain(banned);
+    expect(d.public.valuation).toMatchObject({ d12: 180_000_000, v: 2_000_000_000, yieldPct: 9, supply: 100_000, refPrice: 10_000 });
+    expect(d.public.financials.distributable.every((x) => x === 15_000_000)).toBe(true);
+    expect(JSON.stringify(d.sensitive)).toContain("Jl. Contoh");
   });
   it("canonicalJson mengurutkan kunci", () => expect(canonicalJson({ b: 1, a: [2, { d: 1, c: 2 }] })).toBe('{"a":[2,{"c":2,"d":1}],"b":1}'));
 });
