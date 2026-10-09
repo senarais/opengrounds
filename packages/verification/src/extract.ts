@@ -1,27 +1,37 @@
 import { redact } from "./redact";
 import { parseJsonLoose, type ChatFn } from "./llm";
 
-export type DocKind = "lease" | "bank_statement" | "loan" | "tax" | "license";
+/** Dokumen yang dibaca agen ekstraksi (PRD v4.1 §8.3). */
+export type DocKind = "deed" | "nib" | "npwp" | "land_certificate" | "bank_statement" | "financial_report";
+export const EXTRACTABLE: DocKind[] = ["deed", "nib", "npwp", "land_certificate", "bank_statement", "financial_report"];
 
 type FieldType = "string" | "number" | "boolean" | "date";
-export const FIELD_SPECS: Record<DocKind, Record<string, { type: FieldType; hint: string }>> = {
-  lease: {
-    lease_end_date: { type: "date", hint: "tanggal berakhirnya masa sewa (YYYY-MM-DD)" },
-    lessee_name: { type: "string", hint: "nama penyewa" },
-    rent_per_month: { type: "number", hint: "biaya sewa per bulan dalam rupiah (angka saja)" },
-    forbids_revenue_assignment: { type: "boolean", hint: "true bila ada klausul yang melarang pengalihan/penjaminan pendapatan atau sub-sewa; false bila klausul itu jelas tidak ada" },
+/** `truePattern`: boolean `true` hanya diterima bila kutipannya memuat pola ini (nilai false tidak bisa dibuktikan kutipan). */
+export const FIELD_SPECS: Record<DocKind, Record<string, { type: FieldType; hint: string; truePattern?: RegExp }>> = {
+  deed: {
+    company_name: { type: "string", hint: "nama perseroan/badan usaha sesuai akta" },
+    deed_number: { type: "string", hint: "nomor akta (tulis apa adanya, mis. 12)" },
+    deed_date: { type: "date", hint: "tanggal akta (YYYY-MM-DD)" },
+  },
+  nib: {
+    business_name: { type: "string", hint: "nama pelaku usaha pada NIB" },
+    kbli: { type: "string", hint: "kode KBLI 5 digit yang tercantum (yang pertama bila lebih dari satu)" },
+  },
+  npwp: { taxpayer_name: { type: "string", hint: "nama wajib pajak" } },
+  land_certificate: {
+    holder_name: { type: "string", hint: "nama pemegang hak atas tanah" },
+    right_type: { type: "string", hint: "jenis hak: Hak Milik, Hak Guna Bangunan, Hak Guna Usaha, atau Hak Pakai (tulis seperti di dokumen)" },
+    encumbered: { type: "boolean", hint: "true bila tercatat hak tanggungan/dijaminkan; false bila tidak ada catatan itu", truePattern: /(hak\s+tanggungan|dijaminkan|agunan|jaminan)/i },
   },
   bank_statement: {
+    account_holder: { type: "string", hint: "nama pemilik rekening" },
     period_months: { type: "number", hint: "jumlah bulan yang dicakup mutasi (angka)" },
     total_credit_amount: { type: "number", hint: "total kredit/dana masuk selama periode dalam rupiah (angka saja), hanya bila tertulis jelas sebagai total" },
   },
-  loan: {
-    monthly_installment: { type: "number", hint: "angsuran per bulan dalam rupiah (angka saja)" },
-    forbids_sale_of_revenue: { type: "boolean", hint: "true bila ada klausul yang melarang menjual/menjaminkan pendapatan tanpa persetujuan bank" },
-    collateral: { type: "string", hint: "uraian singkat jaminan/agunan" },
+  financial_report: {
+    company_name: { type: "string", hint: "nama entitas pada laporan keuangan" },
+    total_revenue: { type: "number", hint: "total pendapatan/omzet satu tahun dalam rupiah (angka saja)" },
   },
-  tax: { taxpayer_name: { type: "string", hint: "nama wajib pajak" } },
-  license: { business_name: { type: "string", hint: "nama usaha pada izin" }, valid_until: { type: "date", hint: "masa berlaku izin sampai (YYYY-MM-DD)" } },
 };
 
 export interface FieldResult { value: string | number | boolean | null; page: number | null; quote: string | null; verified: boolean; reason?: string }
@@ -62,12 +72,12 @@ export function numbersIn(text: string): number[] {
 const PROHIBIT = /(dilarang|melarang|larangan|tidak\s+(?:boleh|diperkenankan)|tanpa\s+(?:persetujuan|izin)|wajib\s+(?:mendapat|memperoleh)\s+persetujuan)/i;
 
 /** Nilai harus dapat diturunkan dari kutipannya sendiri: kutipan yang benar tetapi tidak mendukung nilai tetap ditolak. */
-export function supportsValue(type: FieldType, value: string | number | boolean, quote: string): boolean {
+export function supportsValue(type: FieldType, value: string | number | boolean, quote: string, truePattern: RegExp = PROHIBIT): boolean {
   switch (type) {
     case "number": return numbersIn(quote).includes(Number(value));
     case "date": return datesIn(quote).includes(String(value));
     case "string": return norm(quote).includes(norm(String(value)));
-    case "boolean": return value === true && PROHIBIT.test(quote); // `false` (tidak ada klausul) tidak bisa dibuktikan oleh kutipan
+    case "boolean": return value === true && truePattern.test(quote); // `false` (tidak ada catatan) tidak bisa dibuktikan oleh kutipan
   }
 }
 
@@ -96,7 +106,7 @@ export function validateExtraction(kind: DocKind, raw: unknown, pagesText: strin
     const okPage = inRange && quoteInPage(quote, pagesText[page - 1]!);
     const okAny = !okPage && pagesText.some((t) => quoteInPage(quote, t));
     if (!okPage && !okAny) { out[name] = { value: null, page: null, quote: null, verified: false, reason: "kutipan tidak ditemukan di dokumen (nilai dibuang)" }; dropped++; continue; }
-    if (!supportsValue(spec.type, value, quote)) { out[name] = { value: null, page: null, quote: null, verified: false, reason: "nilai tidak didukung oleh kutipannya (nilai dibuang)" }; dropped++; continue; }
+    if (!supportsValue(spec.type, value, quote, spec.truePattern)) { out[name] = { value: null, page: null, quote: null, verified: false, reason: "nilai tidak didukung oleh kutipannya (nilai dibuang)" }; dropped++; continue; }
     out[name] = { value, page: okPage ? page : (pagesText.findIndex((t) => quoteInPage(quote, t)) + 1), quote, verified: true };
   }
   return { fields: out, dropped };
