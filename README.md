@@ -1,90 +1,67 @@
-# OpenGrounds (venue-rwa)
+# Open Grounds (venue-rwa)
 
-Tokenisasi hak atas **bagian omzet** venue olahraga (futsal / badminton / padel) + **PoS** (POS/booking) sebagai sumber data referensi.
-ETHJKT 2026 · track RWA · Sepolia testnet.
+Token **hak manfaat ekonomi atas sebagian laba bersih** venue olahraga yang tanahnya milik sendiri, plus **PoS** (POS/booking) sebagai sumber data pendapatan.
+ETHJKT 2026 · track RWA · Ethereum Sepolia (testnet). Spesifikasi lengkap: `Open_Grounds_PRD_v4.1_Hackathon.md` (lokal, tidak di git).
 
-> **Disclaimer.** Proyek hackathon di **testnet**, tanpa uang riil dan tanpa penawaran publik. Rupiah, KYC, kustodian, dan data venue **disimulasikan dan dilabeli** di UI. Produk ini **tidak disetujui OJK** dan belum masuk sandbox mana pun. Bukan nasihat hukum atau investasi.
+> **Disclaimer.** Proyek hackathon di **testnet**, tanpa uang riil. Rupiah, kustodian, KYC (bila Didit tidak dikonfigurasi), dan split venue **disimulasikan dan dilabeli** di UI. Open Grounds **belum memiliki izin atau persetujuan regulator** untuk menawarkan produk ini dan tidak mengklaim sandbox, sukuk, atau "trustless". Imbal hasil dan likuiditas tidak dijamin. Bukan nasihat hukum atau investasi.
 
-## Ide dalam satu kalimat
+## Ide dalam satu paragraf
 
-Owner venue menjual sebagian omzet booking selama tenor tertentu ke banyak investor kecil. Uang pelanggan terbelah di sumbernya, jadi bagian investor tidak pernah lewat tangan owner.
+Owner venue menjual **X% hak ekonomi atas laba bersih yang bisa dibagikan** ke SPV **Grounds**, dan dibayar di depan (simulasi). Grounds mencetak supply token **sekali** ke treasury lalu menjualnya berkelanjutan ke investor kecil lewat payment gateway. Tiap bulan, waterfall (omzet kotor − refund − biaya − pajak − fee operator − cadangan − fee platform) menghasilkan **jatah per token** yang masuk saldo investor. Chain adalah wasit: kontrak memeriksa nominal, tanda tangan, plafon biaya, dan kewajiban; platform tidak bisa bertindak sendirian.
 
-- **Yang dijual:** manfaat ekonomi (revenue share atas *Eligible Revenue*), bukan kepemilikan venue.
-- **Eligible Revenue** = omzet settle − refund − chargeback − pajak − biaya gateway. Bukan laba.
-- **Token** (ERC-20, `decimals = 0`) = klaim atas kantong investor. **Redeem:** serahkan token → dibakar → terima rupiah dari kantong.
-- **AI hanya menilai.** Yang menandatangani attestation adalah manusia (quorum 2-dari-3, EIP-712).
-- **Bukti pendapatan** datang dari settlement payment gateway, bukan laporan owner. POS hanya mencatat hash root harian yang di-anchor on-chain (tamper-evidence, bukan bukti kebenaran).
+- **Siapa menyetujui apa** (2-dari-3, EIP-712): verifikasi aset → token boleh terbit = platform + owner · angka laba bulanan = platform + owner (verifier menggantikan owner yang diam; beda angka → sengketa) · revaluasi = platform + verifier. Beli dan jual balik: **investor menandatangani pesanannya sendiri** lewat wallet Privy.
+- **Rumus** ada di `/cara-kerja` dan `packages/shared/src/economics.ts`; kontrak menghitung ulang angka yang sama.
+- **AI hanya advisory:** ekstraksi dokumen, silang-cek, rekonsiliasi, indikator risiko. Setiap temuan wajib ditinjau manusia.
 
 ## Arsitektur
 
 ```
-Pelanggan ──bayar──▶ PSP (Xendit / simulasi) ──split di sumber──┬─▶ owner (bagian venue)
-                                                                └─▶ kantong investor (kustodian)
+Pelanggan venue ─bayar─▶ Gateway ─┬─ s% ─▶ kantong SPV        (MockPaymentProvider, sandbox)
+                                  └─ sisa ─▶ owner
+Investor ─tanda tangan pesanan (Privy)─▶ bayar Xendit/sandbox ─▶ escrow ─▶ allocate() on-chain ─▶ token + lot
+Akhir bulan: PoS ledger ─▶ waterfall ─▶ attestation REVENUE_PERIOD ─▶ postRevenuePeriod() ─▶ true-up ─▶ saldo investor ─▶ settlePayout()
 
-apps/pos (PoS, :3001) ─▶ packages/connectors (BookingSource) ─▶ packages/verification ─▶ apps/platform (:3000)
-                                                                                                   │
-                                                                                          reviewer 2-dari-3
-                                                                                                   ▼
-                                                                                  packages/contracts (Sepolia)
-                                                                   AssetAttestation · SeriesToken · Series
+apps/pos (:3001)  ─▶ packages/connectors ─▶ apps/platform (:3000) ─▶ packages/contracts (Sepolia)
+                                                                      AttestationRegistry · SeriesToken · VenueSeries
 ```
 
 | Folder | Peran |
 |---|---|
-| `apps/pos` | **PoS** (port 3001): multi-tenant per company; login admin, produk & sesi, jadwal & booking, tagihan payment gateway otomatis, ledger append-only, hash harian, laporan |
-| `apps/platform` | **Platform tokenisasi** (port 3000): landing & penawaran, portofolio investor, portal owner, reviewer, auditor, konsol operator |
-| `packages/ui` | Design system bersama (palet Midnight / Slate / Ash / Sunrise / Amber / Ivory) |
-| `packages/contracts` | Foundry: attestation, token seri, escrow + kantong + redeem + anchor |
-| `packages/verification` | Rekonsiliasi, policy engine, skor, redaksi |
-| `packages/connectors` | Interface `BookingSource` + implementasi POS (Supabase), laporan & Merkle root |
-| `packages/shared` | Tipe, skema, matematika inti, hash chain, Merkle |
-
-Tiga "pool" yang jangan tertukar: **escrow penggalangan** (dana saat raise), **kantong investor** (akumulasi bagian investor), **sumber pendapatan** (pembayaran pelanggan sebelum split).
-
-## Alur demo (12 jam)
-
-1. POS: buat booking → bayar (simulasi / Xendit sandbox) → refund → laporan.
-2. Owner submit venue → skor AI → 2-dari-3 tanda tangan attestation on-chain.
-3. Investor beli token (KYC mock) → escrow → rilis tahap 1.
-4. Booking baru → split → kantong naik real-time.
-5. Redeem: token dibakar, rupiah (simulasi) keluar.
-6. Skenario fraud: booking tunai/fiktif terdeteksi di rekonsiliasi → exception → attestation dicabut / rilis tahap 2 ditahan.
+| `apps/pos` | **PoS** (:3001): multi-tenant per company, produk & sesi, booking, tagihan gateway, ledger append-only, hash harian, laporan |
+| `apps/platform` | **Platform** (:3000): produk, portofolio, portal owner, review KYB, konsol operator, halaman verifier |
+| `packages/contracts` | Foundry: `AttestationRegistry`, `SeriesToken`, `VenueSeries` + tes unit, invarian, skenario "platform curang ditolak" |
+| `packages/shared` | Rumus ekonomi, skema formulir owner, disclosure, katalog kebijakan data |
+| `packages/verification` | Ekstraksi dokumen (redaksi + validasi kutipan), silang-cek, gerbang KYB, rekonsiliasi |
+| `packages/connectors` · `packages/ui` | Interface `BookingSource` + laporan · design system |
+| `db/` | `00_reset` → `01_pos` → `02_platform` → `03_access` |
 
 ## Cara jalan
 
-Prasyarat: Node ≥ 22, pnpm ≥ 10, Foundry, akun Supabase, wallet testnet dengan Sepolia ETH, MetaMask.
+Prasyarat: Node ≥ 22, pnpm ≥ 10, Foundry, akun Supabase, wallet testnet dengan Sepolia ETH, MetaMask (untuk wallet verifier), akun Privy.
 
 ```bash
-cp .env.example .env     # satu .env di root untuk semua app, skrip, dan Foundry (tanpa .env per app)
+cp .env.example .env     # satu .env di root untuk semua app, skrip, dan Foundry
 pnpm install
 cd packages/contracts && forge install OpenZeppelin/openzeppelin-contracts --no-git && forge install foundry-rs/forge-std --no-git && forge build && cd ../..
+node scripts/gen-abi.mjs   # ABI + bytecode ke apps/platform/lib/abi.ts (setelah forge build)
 ```
 
-1. **Database.** Di Supabase SQL editor jalankan berurutan `db/migrations/0001` … `0019`. Reset total: `db/reset_all.sql` lalu `pnpm --filter @venue-rwa/platform reset:storage`.
-2. **Wallet.** Buat 4 wallet testnet baru (deployer + 3 penandatangan, orang berbeda; Signer 3 = auditor independen), isi Sepolia ETH, tulis alamatnya di `.env`. Jangan pakai kunci asli.
-3. **Kontrak.** `./scripts/deploy.sh` (butuh keystore Foundry `deployer`: `cast wallet import deployer --interactive`). Alamat registry tersimpan otomatis di `packages/contracts/deployments/latest.json` dan dibaca platform; kontrak Series per pengajuan dideploy otomatis setelah review.
-4. **Akun staf dan wallet operator.** `pnpm --filter @venue-rwa/platform staff:create`, lalu `./scripts/setup-operator.sh` (hot wallet server; beri ETH).
-5. **Jalankan** (terminal terpisah): `pnpm dev:pos` (→ :3001) dan `pnpm dev:platform` (→ :3000).
+1. **Database.** Di Supabase SQL editor jalankan berurutan `db/00_reset.sql` (HAPUS semua data), `01_pos.sql`, `02_platform.sql`, `03_access.sql`. Lalu `pnpm --filter @venue-rwa/platform reset:storage` untuk mengosongkan bucket dokumen.
+2. **Wallet.** Deployer (keystore: `cast wallet import deployer --interactive`), wallet **verifier** independen (`ATTESTOR_VERIFIER_ADDRESS`), dan operator (dibuat `./scripts/setup-operator.sh`). Slot owner memakai wallet Privy masing-masing owner.
+3. **Kontrak.** `./scripts/deploy.sh` men-deploy `AttestationRegistry` sekali (alamat di `packages/contracts/deployments/latest.json`). `VenueSeries` + token dideploy otomatis per venue saat reviewer menyetujui KYB.
+4. **Staf.** `pnpm --filter @venue-rwa/platform staff:create` (operator pertama), lalu undang **reviewer** (pihak luar independen, slot VERIFIER) dan akun **SPV** (Grounds, pembeli hak) lewat `/staff`.
+5. **Jalankan:** `pnpm dev:pos` (:3001) dan `pnpm dev:platform` (:3000).
 
-Opsional di `.env` (kosong = jalur simulasi berlabel):
-- `PSP_MODE=xendit` + `XENDIT_SECRET_KEY`: pembelian token dan booking dibayar lewat Xendit Invoice; token di-mint setelah invoice PAID menurut API Xendit. Key `xnd_development_…` = mode uji.
-- `NEXT_PUBLIC_PRIVY_APP_ID`: wallet investor dibuat otomatis (Privy, custom auth JWT dari Supabase: signing key asimetris, JWKS `…/auth/v1/.well-known/jwks.json`, claim `sub`, `aud=authenticated`).
-- `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`: gateway OpenAI-compatible (Morphic) untuk ekstraksi dokumen; hanya teks yang sudah diredaksi yang dikirim.
-- `DIDIT_*`: KYC sungguhan lewat Didit; kosong = KYC mock berlabel.
-- `INTERNAL_API_TOKEN`: token rahasia antar-app. Setiap pembayaran booking yang settle di gateway membuat PoS memberi tahu platform, lalu bagian investor langsung diposting ke kantong on-chain (bila penawaran sudah terdanai). Kosong = kantong hanya bertambah lewat finalisasi manual operator.
+Opsional di `.env` (kosong = jalur simulasi berlabel): `PSP_MODE=xendit` + `XENDIT_SECRET_KEY` (pembelian investor lewat Xendit mode uji), `NEXT_PUBLIC_PRIVY_APP_ID` (wajib untuk wallet investor/owner; custom auth JWT Supabase, JWKS `…/auth/v1/.well-known/jwks.json`), `LLM_*` (gateway Morphic untuk ekstraksi dokumen), `DIDIT_*` (KYC sungguhan), `INTERNAL_API_TOKEN` (PoS → platform dan HMAC webhook sandbox).
 
-Semua pembayaran booking wajib lewat payment gateway (tunai dan QRIS milik sendiri tidak diterima). Syarat penawaran (jumlah token, harga, persen omzet, tenor, minimum) dikunci sejak owner mengirim pengajuan.
+**Alur demo:** owner daftar & ajukan → pemeriksaan otomatis + temuan AI → reviewer meninjau & menyetujui (kontrak seri dideploy) → Grounds (SPV) menyetujui pembelian hak → platform menandatangani → owner (penjual) menandatangani akuisisi (simulasi) → token dicetak ke treasury → investor KYC + rekening + tanda tangan pesanan + bayar → token masuk (lot terkunci 10 menit, demo mode) → booking di PoS (split s%) → operator menutup periode → owner menandatangani angka → kontrak menghitung jatah → true-up → saldo investor → tarik / reinvest / jual balik → halaman operator "platform curang ditolak" dan status Overdue.
 
-Tidak ada akun maupun data contoh: owner dan investor mendaftar sendiri di `/register`, staf dibuat dengan `staff:create`.
+**Tes:** `pnpm test:contracts`, `pnpm --filter @venue-rwa/shared test`, `pnpm --filter @venue-rwa/verification test`, `pnpm --filter @venue-rwa/pos selftest`.
 
-**Alur satu perusahaan:** owner daftar dan ajukan (data + dokumen) → verifikasi otomatis + analisis dokumen AI → operator dan auditor masing-masing setuju dengan satu tanda tangan MetaMask → kontrak dideploy, attestation dikirim, penawaran dibuka otomatis → investor membayar → token di-mint → PoS mencatat omzet → kantong investor → redeem.
+## What's new in this hackathon (aturan #1–#2)
 
-**Tes:** `pnpm test:contracts`, `pnpm --filter @venue-rwa/shared test`, `pnpm --filter @venue-rwa/verification test`, `pnpm --filter @venue-rwa/pos selftest`, `./scripts/e2e-local.sh` (chain lokal anvil + Supabase). Uji AI sungguhan: `pnpm --filter @venue-rwa/platform exec tsx --env-file=../../.env scripts/ai-live-test.ts`.
+Dibuat selama periode hackathon: seluruh `packages/contracts`, `apps/platform`, `packages/shared`, `packages/verification`, `db/`, dan README ini (riwayat commit di repo). **Kode atau infrastruktur yang sudah ada sebelumnya** dan dipakai ulang: PoS (`apps/pos`) dan `packages/connectors`/`packages/ui` dari iterasi awal proyek ini (dibuat di dalam repo ini sebelum pivot ke PRD v4.1; tidak ada kode dari proyek Arbitrum lama). Pustaka dan layanan pihak ketiga: OpenZeppelin Contracts v5, forge-std, viem, Next.js, React, Supabase, Privy, Xendit (mode uji), Didit, Morphic (gateway LLM), unpdf, tesseract.js, three.js / react-three-fiber, zod.
 
-## Kontrak (Sepolia)
+## Batas yang jujur
 
-Registry `AssetAttestation` aktif: lihat `packages/contracts/deployments/latest.json`. Setiap pengajuan mendapat kontrak `Series` dan token sendiri; alamatnya tampil di halaman penawaran dan konsol Operator (tersambung ke Etherscan).
-
-## Aturan main demo
-
-Testnet Sepolia · fiat dan KYC disimulasikan dan dilabeli · data sintetis dilabeli · tidak pernah mengklaim disetujui OJK · prinsip syariah sebagai aturan desain (tanpa bunga tetap, bagi hasil dari pendapatan nyata), bukan klaim sertifikasi.
+Open Grounds tidak memiliki izin regulator; rupiah dan escrow disimulasikan; 2-dari-3 hanya mendemokan mekanisme bila kunci dipegang tim yang sama; nilai aset diinput reviewer (production: penilai independen); cek AHU/OSS belum terintegrasi; xenPlatform belum aktif sehingga split memakai sandbox; catatan on-chain bukan bukti kepemilikan hukum.

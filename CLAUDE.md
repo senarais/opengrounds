@@ -1,75 +1,87 @@
 # venue-rwa: konteks untuk Claude Code
 
-Nama produk: **OpenGrounds** (logo `OG.png`, dipasang di `apps/*/public/og-logo.png` dan `apps/*/app/icon.png`). Nama paket/folder tetap `venue-rwa`.
+Produk: **Open Grounds** (platform) + **Grounds** (SPV penerbit token). Logo `OG.png` (`apps/*/public/og-logo.png`, `apps/*/app/icon.png`). Nama paket/folder tetap `venue-rwa`. ETHJKT 2026, track RWA, **Ethereum Sepolia**, testnet saja.
 
-Platform RWA yang men-tokenisasi hak atas bagian **omzet (Eligible Revenue)** venue olahraga, plus **PoS (POS/booking)** sebagai sumber data referensi. ETHJKT 2026, track RWA, chain **Sepolia**. Satu monorepo, satu submission.
+**Sumber kebenaran: `Open_Grounds_PRD_v4.1_Hackathon.md`** (lokal, tidak di git: di root repo, atau salinannya di `~/Downloads/`). Aturan di bawah adalah ringkasan wajibnya. Bila kode dan PRD berbeda, PRD yang benar; bila PRD menandai **[Terbuka]**, tanya Nuza, jangan menebak.
 
-Setup ada di `README.md`. Folder `docs/` (PRD, PLAN, OPEN-DECISIONS, XENDIT, CONTRACTS, contoh-data) hanya lokal, tidak ikut git; baca bila ada di mesin ini.
+**Status migrasi:** kontrak (53 tes), `packages/shared` (rumus, formulir owner), `packages/verification` (gerbang KYB, silang-cek), skema `db/00–03`, backend dan halaman platform, serta README sudah di model v4.1 (build Next lulus). Belum teruji end-to-end di Sepolia: butuh Supabase + Privy + deploy registry oleh Nuza. Masih tertinggal: script e2e baru, data contoh, model 3D per jenis lapangan di halaman produk, tes TS untuk flow platform.
 
-## Struktur
+## Model (PRD v4.1 §2–4)
 
-| Folder | Isi |
-|---|---|
-| `apps/pos` | PoS (port 3001): MULTI-TENANT per company (semua tabel memuat company_id, RLS per anggota). Produk bersesi, booking, tagihan PSP otomatis, ledger append-only, hash root harian. Aplikasi TERPISAH dari platform |
-| `apps/platform` | Platform tokenisasi (port 3000): penawaran, portofolio, owner, reviewer, auditor, operator |
-| `packages/ui` | Design system bersama. Palet: Midnight #0F172A, Slate #334155, Ash #94A3B8, Sunrise #FF7A00 (aksen, teks di atasnya Midnight), Amber #FFD166 (sorotan), Ivory #F8FAFC (latar); font Plus Jakarta Sans (judul) + Inter (isi); maskot "Bolo" (bola Sunrise). Nama token mint/peach/butter/sky/lilac/rose di CSS hanya alias semantik ke palet ini. Visual lucu hanya untuk MENJELASKAN mekanisme (diorama 3D, koin terbelah, toples kantong, paspor tanda tangan); tanpa konfeti/streak/hitung mundur saat membeli; risiko dan label testnet tetap terlihat |
-| `packages/contracts` | Foundry: AssetAttestation, SeriesToken, Series |
-| `packages/verification` | Ekstraksi dokumen, rekonsiliasi, policy engine, scoring |
-| `packages/connectors` | Interface `BookingSource`; POS kita = connector referensi |
-| `packages/shared` | Tipe, skema (zod), util |
+- Owner menjual **X% hak manfaat ekonomi atas laba bersih yang bisa dibagikan** ke SPV Grounds; Grounds memecahnya jadi token dan menjual lewat Open Grounds. Bukan omzet, bukan tanah, bukan saham PT owner.
+- Venue hanya diterima bila **tanah milik sendiri** (sertifikat atas nama owner/badan usahanya, tidak sedang dijaminkan), histori ≥12 bulan, ≥90% pendapatan digital, lulus KYB (badan usaha, penandatangan, pemilik manfaat ≥25%).
+- SPV membayar owner **di depan** (`ACQUISITION_CLOSED`, simulasi berlabel), supply dicetak **sekali** ke treasury, lalu dijual **berkelanjutan**. Tidak ada periode penawaran, min raise, refund karena gagal terkumpul, atau tenor. Token tanpa masa berlaku; berakhir hanya lewat likuidasi/pembubaran atau penegakan gagal bayar.
+- **Tidak ada burn.** Token jual balik kembali ke treasury dan dijual lagi.
+- Aset venue = patokan harga, **bukan jaminan**. UI wajib: "Token ini tidak dijamin oleh aset venue."
 
-## Aturan keras
+## Rumus (§4)
 
-- Jangan menulis klaim bahwa produk disetujui OJK; semua uang simulasi (rupiah, kustodian) dan KYC mock harus dilabeli di UI. KYC nyata lewat Didit bila `DIDIT_*` terisi; tanpa itu, KYC mock berlabel.
-- Eligible Revenue = omzet settle − refund − chargeback − pajak − biaya gateway. Jangan memakai laba.
-- Token tidak "naik harga". Tampilkan **dibayar vs nilai tebus**; NAV = estimasi.
-- Ledger POS append-only; refund = entri negatif baru, tidak pernah edit entri lama.
-- Kontrak tidak boleh mint tanpa attestation valid; suplai terkunci setelah penawaran ditutup.
-- Akuntansi kantong memakai variabel internal (P, R, S), **bukan `balanceOf`**.
-- AI tidak menandatangani apa pun; keputusan lewat policy engine deterministik + manusia. Urutan: review manusia yang butuh DUA suara setuju (satu operator DAN satu auditor; satu penolakan = ditolak) → deploy kontrak → attestation 2 tanda tangan yang WAJIB memuat penandatangan independen (signers[2], auditor luar; dua anggota tim saja ditolak kontrak) → buka penawaran. Veto (cabut/FAIL) cukup 1 penandatangan mana pun. Staf baru diundang lewat tautan sekali pakai; operator tidak pernah mengetahui kata sandi staf lain.
-- Tidak ada kode dari proyek Arbitrum lama. Chain: Sepolia. PSP: Xendit lewat adapter.
-- Jangan klaim kapabilitas Xendit yang belum terverifikasi. Lihat `docs/XENDIT.md` bila ada (lokal): Invoice/QRIS/VA/e-wallet terverifikasi di test mode; split rules dan sub-akun (xenPlatform) TIDAK tersedia di akun ini.
+- `V = min(V_aset, D12 ÷ r)`; `r` 9% [Asumsi]. `D12` hanya dari pendapatan yang lolos rekonsiliasi booking ↔ pembayaran ↔ bank.
+- Uji kewajaran `y = D12 ÷ V`, band 5–20% [Asumsi]; di luar band = ditandai untuk reviewer, bukan ditolak otomatis.
+- `S = V × X`, `p` Rp10.000 [Asumsi], `N = S ÷ p`, `p_ref = V × X ÷ N` (berubah hanya lewat revaluasi `VALUATION_UPDATE`, untuk transaksi baru).
+- Waterfall: `D = max(0, gross − refund − opex − pajak − fee_operator − cadangan_venue − fee_platform)`; `P_SPV = D × X`; `F_spv = P_SPV × m` (m 2% [Asumsi]); `P_inv = P_SPV − F_spv`; `P_owner = D × (1 − X) + fee_operator`. Kerugian tidak dibawa ke bulan berikutnya.
+- Jatah: akumulator `accPerToken` (rupiah × 1e18) dari `P_inv ÷ N`, dibulatkan ke bawah, dust ke periode berikutnya. Bagian token treasury kembali ke Grounds. Kewajiban periode = `(N − saldo_treasury) × jatah_per_token`.
+- Pengumpulan harian: split di sumber `s%` (12% [Asumsi]) ke kantong SPV, sisanya ke owner; akhir bulan **true-up** ke `P_SPV`. Kekurangan yang tidak dilengkapi owner sampai tenggat → `Overdue`.
 
-## Aturan tambahan
+## On-chain (§6): chain = wasit, bukan database
 
-- PoS multi-tenant: `company_id` SELALU diturunkan dari sesi login (bukan input form). Tulis lewat service_role di server; baca lewat klien pengguna (RLS). Jangan pernah campur data antar company.
-- Settlement hanya dari webhook PSP / halaman bayar simulasi, bukan klik kasir.
-- Token ERC-20 OpenZeppelin v5, `decimals = 0`; `transfer` ERC-20 langsung selalu dikunci. Token hanya bergerak lewat Series: mint/burn, dan `transferFor` (EIP-712 dari pengirim, diteruskan operator) antar dua wallet allowlist/KYC, hanya saat Funded/Active, tidak boleh memindahkan token yang terkunci untuk redeem. Tidak ada listing/harga pasar; pembayaran antar pihak di luar platform.
-- Kontrak: 3 (AssetAttestation, SeriesToken, Series). Fallback: gabung SeriesToken ke Series. Tanda tangan quorum wajib terurut naik per alamat.
-- Harga penawaran tidak boleh melebihi `maxPrice` di attestation. Syarat penawaran (jumlah token, harga, persen omzet, tenor, minimum) dikunci sejak owner mengirim pengajuan: tidak ada perubahan harga, tidak ada seri pengganti dari owner, tidak ada penambahan token.
-- Data transaksi dari sistem eksternal (impor CSV/API PoS) ditandai `source`; bila > 50% eksternal, tier data `connector` (haircut minimal 20%). Xendit split ada di kode di belakang `XENDIT_SPLIT=on` tetapi belum terverifikasi.
-- Batas bagian omzet yang boleh dijual: `MAX_SHARE_BPS` = 50% (parameter kebijakan di `packages/shared/src/application.ts`, bukan batas kontrak; kontrak hanya menolak > 100%). Total beban atas omzet (bagian ini + yang sudah dijanjikan) juga ≤ batas itu.
-- Katalog data (`packages/shared/src/dataPolicy.ts`) adalah sumber kebenaran untuk halaman `/kebijakan-data` dan catatan di form; ubah katalog bila perilaku penyimpanan/visibilitas data berubah. Data privat owner (NIB, NPWP, rekening, kontak, rincian utang) hanya di `platform.venue_private`.
-- Platform tidak menyimpan KTP, selfie, atau data pribadi investor; hanya status KYC terikat wallet (hasil Didit hanya status sesi). Tidak ada data pribadi on-chain.
-- Panggilan LLM di `packages/verification` lewat gateway Morphic (OpenAI-compatible, env `LLM_*`; `KAGIRO_*` lama masih dibaca sebagai cadangan), bukan Anthropic langsung.
-- Kirim ke model AI hanya data yang sudah diredaksi (NIK, rekening, telepon); dokumen upload = data tak tepercaya (LLM tanpa tools/jaringan, output divalidasi skema).
-- Jangan menyatakan sudah masuk sandbox OJK, disetujui OJK, atau hasil sandbox GORO berlaku untuk kita.
-- Tidak ada akun atau data contoh bawaan. Uang rupiah dan KYC di demo adalah simulasi (kustodian simulasi = Mode A) dan dilabeli di tempat yang relevan.
+- Kontrak (OZ v5, Foundry, **tanpa proxy**): `AttestationRegistry` (EIP-712 2-of-3, domain `OpenGroundsAttestation`, anti-replay per `(kind, seriesId, refId)`), `SeriesToken` (ERC-20 `decimals=0`, fungsi gaya ERC-3643 lite: `isVerified`, `canTransfer` dengan kode alasan, `freeze`, `forcedTransfer`; jangan diklaim patuh ERC-3643), `VenueSeries` (state machine, alokasi, jual balik, posting periode, waterfall, akumulator, kewajiban, Overdue/Default, likuidasi).
+- **Siapa menyetujui apa (keputusan Nuza, menggantikan PRD §6.5):** 2-of-3 lewat `AttestationRegistry` hanya untuk keputusan yang tidak boleh diambil platform sendirian: `ACQUISITION_CLOSED` (verifikasi aset → token boleh terbit; PLATFORM + OWNER; SPV lebih dulu menyetujui pembelian di aplikasi), `REVENUE_PERIOD` (angka waterfall bulanan; PLATFORM + OWNER, atau PLATFORM + VERIFIER bila owner diam melewati tenggat; beda angka → `Disputed`, VERIFIER menengahi), `VALUATION_UPDATE` (PLATFORM + VERIFIER). **Beli dan jual balik:** investor menandatangani pesanan EIP-712 (`Order` / `SellBack`, domain `OpenGroundsSeries`) lewat Privy, platform (`CONTROLLER`) mengeksekusi setelah rupiah masuk. **Jatah sudah dibayar:** platform saja (`settlePayout`), tidak bisa melebihi kewajiban. Owner dan investor sama-sama memakai wallet Privy.
+- Kontrak memeriksa: `paidIdr == tokens × refPrice`; tanda tangan pesanan milik investor penerimanya; pesanan tidak kedaluwarsa dan tidak dipakai ulang; total alokasi ≤ saldo treasury; penerima di allowlist dan tidak dibekukan; potongan ≤ gross; `opex ≤ maxOpexBps × gross`; periode tidak diposting dua kali; pembayaran jatah tidak melebihi kewajiban; `markOverdue`/`markDefaulted` boleh dipanggil siapa pun setelah tenggat.
+- Transfer: treasury → investor (allowlist + `PAYMENT_SETTLED`), investor → treasury (lot terbuka, `Active`, `SELLBACK_SETTLED`), **investor → investor dilarang**, `forcedTransfer` hanya `CONTROLLER` dengan kode alasan.
+- Lot per alokasi `{amount, unlockAt}`, kunci 6 bulan [Asumsi] sebagai parameter seri (demo boleh dipendekkan, berlabel "demo mode"), FIFO, maks 32 lot per alamat.
+- Peran: `ADMIN` (multisig), `CONTROLLER` dan `ATTESTOR_PLATFORM` (relayer backend), `ATTESTOR_VERIFIER`, `ATTESTOR_COUNTERPARTY`, `TREASURY`. Demo jujur: bila dua kunci dipegang tim, 2-of-3 hanya mendemokan mekanisme.
+- State seri: `Draft → Verified → Active ⇄ Disputed`, `Active → Overdue → (Active | Defaulted)`, `Defaulted → (Active | Liquidating)`, `Active → Liquidating → Closed`.
+- Parameter demo [Asumsi]: r 9%, p Rp10.000, m 2%, s 12%, d 0%, band y 5–20%, maxOpex 80%, kunci lot 10 menit ("demo mode"), tenggat Overdue 7 hari, toleransi Defaulted 14 hari, jendela tanda tangan owner 3 hari.
+- Rupiah, saldo ledger, dan penarikan **di luar chain**. Data pribadi tidak pernah ke chain (hanya status allowlist dan hash bukti).
+- Invarian Foundry wajib (PRD §6.7, disesuaikan): supply tetap setelah `activate`, Σsaldo = totalSupply, tidak ada transfer investor→investor, lot terkunci tidak keluar, pesanan tidak dipakai ulang, nominal salah revert, token tidak terbit tanpa tanda tangan investor, potongan > gross revert, akumulator × supply + dust = Σ pool. Skenario demo "platform curang ditolak" §6.8 (versi kita: tanpa tanda tangan investor, nominal salah, transfer antar investor, opex di atas plafon, posting ulang periode, laba bulanan tanpa owner).
 
-## Rumus inti
+## Persetujuan review KYB (keputusan Nuza terbaru)
 
-- Nilai tebus per token = `(P − R) / S`. Redeem k token bayar `k × (P − R) / S` (bulatkan ke bawah), lalu R naik, S turun.
-- P = total masuk kantong (final, hanya naik); R = total dibayar; S = suplai.
-- Suplai = target ÷ harga unit. Pita harga: ≤ +10% auto, +10–25% butuh reviewer, > +25% tolak. Angka 10/25/30 = parameter kebijakan.
-- Semua token dibakar → seri Closed, split dimatikan (hindari bagi nol).
+- Wallet tanda tangan review `operator` boleh akun MetaMask pilihan operator yang sedang login; alamatnya ikut ditandatangani dan dicatat di audit. Tidak wajib sama dengan hot wallet PLATFORM. Wallet `reviewer` tetap harus verifier terdaftar. Aturan wallet on-chain tidak berubah.
+- Pengajuan wajib mendapat dua persetujuan SETUJU yang ditandatangani lewat MetaMask: satu `operator` dan satu `reviewer` independen. Satu suara tidak mengubah status menjadi APPROVED dan tidak mendeploy kontrak.
+- Domain tanda tangan review adalah `OpenGroundsReview` (off-chain), berbeda dari attestation akuisisi. Tanda tangan mengikat kasus, identitas staf, nilai aset, catatan, hash data/bukti, chain, registry, dan batas waktu pengiriman.
+- Dua suara harus dari identitas serta wallet yang berbeda, untuk snapshot bukti dan nilai aset yang sama. Suara yang sudah diverifikasi tetap tersimpan; perubahan bukti membuat suara lama tidak berlaku untuk pengajuan terkini.
+- Setelah kuorum review lengkap, kontrak seri otomatis disiapkan. Token belum terbit: persetujuan pengalihan hak oleh owner tetap diperlukan dalam ACQUISITION_CLOSED.
 
-## State machine penawaran
+## Peran (keputusan Nuza)
 
-Draft → Verifying → Attested → Offering → Funded / Failed (refund) → Active → Closed
+`owner` (penjual hak), `investor`, `operator` (tim internal Open Grounds), `reviewer` (pihak luar independen: review KYB + slot VERIFIER), `spv` (Grounds, pembeli hak: menyetujui akuisisi, treasury, modal, cadangan buyback; akun dibuat operator lewat undangan). Slot PLATFORM di kontrak mewakili Grounds via Open Grounds; kontrak tetap 3 slot. Demo jujur: operator dan SPV dipegang tim yang sama.
 
-## Invarian yang wajib dites (Foundry)
+## Uang investor (§3.5–3.7, §8.4)
 
-1. redeemed ≤ pool
-2. suplai ≤ cap
-3. tidak ada mint tanpa attestation valid
-4. tidak ada rilis dana tanpa syarat
-5. seri Closed tidak bisa menerima split
+- Rupiah saja, lewat PJP (QRIS). **Tanpa stablecoin**, termasuk IDRX/MockIDRX.
+- Sebelum beli pertama: KYC lolos + rekening bank atas nama sendiri (nama = nama KYC; demo mock berlabel). Dana beli ke escrow atas nama SPV, bukan rekening operasional platform. Token dialokasikan **hanya setelah** rupiah masuk (Xendit mode uji) dan pesanan investor yang ditandatangani dieksekusi. Pesanan yang tidak dibayar kedaluwarsa.
+- Distribusi bulanan → dana di rekening distribusi → kredit **saldo ledger investor** (append-only, koreksi lewat entri pembalik) → `PAYOUT_SETTLED`. Investor memilih **tarik** (`Requested → Screened → Sent → Settled | Failed`; gagal sisi investor bukan Overdue) atau **reinvest** (pembelian dari saldo, butuh `PAYMENT_SETTLED`, lot baru). Ganti rekening: verifikasi ulang + cooling-off 48 jam [Asumsi].
+- Jual balik ke treasury: hanya lot terbuka, seri `Active`, harga `p_ref × (1 − d)` (d 0–5% [Asumsi]), dari cadangan buyback, jendela berkala FIFO, **tidak dijamin**. Owner tidak membeli balik.
+- xenPlatform belum aktif di akun ini: split dan escrow memakai `MockPaymentProvider` dengan webhook bertanda tangan identik, berlabel **sandbox**. Jangan klaim kapabilitas Xendit yang belum dicek.
+
+## Kepatuhan dan klaim (§7)
+
+- Tampil di UI: testnet/simulasi; imbal hasil tidak dijamin; likuiditas tidak dijamin; harga referensi dari rumus (tautan); Open Grounds belum berizin.
+- **Tidak boleh mengklaim:** izin/sandbox OJK, token = sukuk/saham/efek, "trustless", janji buyback/imbal hasil/likuiditas, apa pun soal internal GORO, catatan on-chain = bukti kepemilikan hukum, statistik lahan milik sendiri, integrasi AHU/OSS.
+- Semua angka **[Asumsi]** dilabeli di UI dan pitch.
+
+## KYB dan AI (§8.3)
+
+- Gerbang data wajib owner: NIB, NPWP, akta, KBLI, direksi/komisaris, penandatangan, pemilik manfaat ≥25%, data venue, **lahan milik sendiri** (jenis hak, nomor sertifikat, atas nama, status jaminan), keuangan 6–12 bulan, X% yang ditawarkan, integrasi.
+- Empat agen advisory: ekstraksi dokumen, silang-cek antar dokumen, anomali rekonsiliasi, indikator risiko. Output JSON dengan `source_refs`; fakta tanpa bukti = `UNVERIFIED`; `requires_human_review = true` selalu. AI tidak boleh menyetujui, mencetak token, mengubah rekening, memindahkan uang.
+- LLM lewat gateway Morphic (OpenAI-compatible, env `LLM_*`), bukan Anthropic langsung. Kirim hanya teks yang sudah diredaksi; dokumen upload = data tak tepercaya (tanpa tools, output divalidasi skema).
+
+## Aturan teknis yang tetap
+
+- PoS multi-tenant: `company_id` selalu dari sesi login, tulis lewat service_role di server, baca lewat RLS. Ledger PoS append-only, refund = entri negatif. Settlement hanya dari webhook PSP. Semua pembayaran booking wajib lewat payment gateway.
+- Katalog data `packages/shared/src/dataPolicy.ts` = sumber halaman `/kebijakan-data`; ubah bila perilaku data berubah. Data privat owner hanya di tabel privat. Data investor yang boleh disimpan: status KYC, alamat dompet, rekening bank tersamarkan + hasil cocok nama; tanpa KTP/selfie.
+- Wallet investor dan owner: Privy (custom auth JWT Supabase). Verifier memakai MetaMask (wallet terdaftar di registry); backend memegang CONTROLLER + slot PLATFORM.
+- Satu `.env` di root untuk semua app, skrip, dan Foundry.
+- Design system `packages/ui`: Midnight #0F172A, Slate #334155, Ash #94A3B8, Sunrise #FF7A00 (aksen, teks di atasnya Midnight; garis grafik pakai #c25a00), Amber #FFD166, Ivory #F8FAFC; mode terang saja; Plus Jakarta Sans + Inter. Visual lucu hanya untuk menjelaskan mekanisme; tanpa konfeti/hitung mundur di alur beli.
+- pnpm workspace, TypeScript strict, Node ≥ 22, Next.js 16. Foundry, Solidity ^0.8.24, cek nama file OZ v5 saat install.
+- Hackathon §9.1: README memuat "What's new in this hackathon"; kode/infrastruktur lama ditandai jelas; cantumkan atribusi pustaka/API pihak ketiga.
 
 ## Definisi selesai
 
-Alur lengkap jalan end-to-end di Sepolia lewat web (pnpm test, forge test, `./scripts/e2e-local.sh`, PoS selftest lulus), README bisa dijalankan orang lain.
+Alur P0 PRD §9.3 jalan end-to-end di Sepolia lewat web; `forge test` (termasuk invarian dan skenario §6.8), tes TypeScript, dan e2e lulus; README bisa dijalankan orang lain.
 
-## Konvensi
+## Gaya kerja
 
-- pnpm workspace, TypeScript strict, Node ≥ 22. Contracts: Foundry, Solidity ^0.8.24.
-- Nama file OpenZeppelin v5: cek persis saat install (mis. `ReentrancyGuard` ada di `utils/`).
+User dipanggil Nuza, bahasa Indonesia santai di chat; kode, komentar, dan identifier Inggris.
