@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# Sekali jalan: bikin wallet OPERATOR (hot wallet testnet untuk server platform), beri role OPERATOR di Series,
-# lalu danai operator dan 3 signer dengan sedikit Sepolia ETH dari deployer. Private key operator ditulis ke .env
-# tanpa pernah dicetak.
+# Sekali jalan: bikin wallet OPERATOR (hot wallet testnet untuk backend platform: CONTROLLER/ADMIN seri + slot PLATFORM + bayar gas),
+# lalu danai dari deployer. Private key operator ditulis ke .env tanpa pernah dicetak.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 set -a; source "$ROOT/.env"; set +a
-for v in SEPOLIA_RPC_URL DEPLOYER_ADDRESS SIGNER_1_ADDRESS SIGNER_2_ADDRESS SIGNER_3_ADDRESS; do
+for v in SEPOLIA_RPC_URL DEPLOYER_ADDRESS; do
   [ -n "${!v:-}" ] || { echo "❌ $v kosong di .env"; exit 1; }
 done
 [ -f "$HOME/.foundry/keystores/deployer" ] || { echo "❌ keystore 'deployer' belum ada"; exit 1; }
-SERIES=$(python3 -c "import json;print(json.load(open('packages/contracts/deployments/latest.json'))['Series'])")
 
 if grep -qE '^OPERATOR_PRIVATE_KEY=.+' .env; then
   echo "→ Operator sudah ada di .env, dipakai ulang."
@@ -30,23 +28,12 @@ read -r -s -p "Password keystore 'deployer': " PW; echo
 PWF=$(mktemp); chmod 600 "$PWF"; trap 'rm -f "$PWF"' EXIT; printf '%s' "$PW" > "$PWF"; unset PW
 SEND=(cast send --account deployer --password-file "$PWF" --rpc-url "$SEPOLIA_RPC_URL")
 
-ROLE=$(cast keccak "OPERATOR_ROLE")
-if [ "$(cast call "$SERIES" 'hasRole(bytes32,address)(bool)' "$ROLE" "$OPERATOR_ADDRESS" --rpc-url "$SEPOLIA_RPC_URL")" = "true" ]; then
-  echo "→ Role OPERATOR sudah diberikan."
-else
-  echo "→ Memberi role OPERATOR…"
-  "${SEND[@]}" "$SERIES" 'grantRole(bytes32,address)' "$ROLE" "$OPERATOR_ADDRESS" >/dev/null
-fi
-
 fund () { # alamat jumlah
   local bal; bal=$(cast balance "$1" --rpc-url "$SEPOLIA_RPC_URL" --ether)
   if awk -v b="$bal" -v m="$2" 'BEGIN{exit !(b+0 >= m+0)}'; then echo "→ $1 sudah punya $bal ETH"; else
     echo "→ Kirim $2 ETH ke $1"; "${SEND[@]}" "$1" --value "${2}ether" >/dev/null; fi
 }
-fund "$OPERATOR_ADDRESS" 0.15
-fund "$SIGNER_1_ADDRESS" 0.03
-fund "$SIGNER_2_ADDRESS" 0.03
-fund "$SIGNER_3_ADDRESS" 0.03
-
-echo "→ Cek: operator punya role? $(cast call "$SERIES" 'hasRole(bytes32,address)(bool)' "$ROLE" "$OPERATOR_ADDRESS" --rpc-url "$SEPOLIA_RPC_URL")"
+# operator membayar gas deploy VenueSeries per venue + semua transaksi alokasi/posting
+fund "$OPERATOR_ADDRESS" 0.3
+[ -n "${ATTESTOR_VERIFIER_ADDRESS:-}" ] && fund "$ATTESTOR_VERIFIER_ADDRESS" 0.02 || echo "ℹ️  ATTESTOR_VERIFIER_ADDRESS kosong: isi dengan wallet verifier independen sebelum deploy."
 echo "✅ Selesai."

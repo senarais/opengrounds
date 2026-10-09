@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Deploy AssetAttestation + Series (+ SeriesToken) ke Sepolia. Bisa dijalankan dari folder mana saja.
+# Deploy AttestationRegistry ke Sepolia (sekali). Kontrak seri (VenueSeries + SeriesToken) dideploy backend per venue setelah KYB disetujui.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/packages/contracts"
 set -a; source "$ROOT/.env"; set +a
+# forge lewat WebSocket sering mencetak "alloy_transport_ws: failed to deserialize" dan bisa macet: pakai HTTPS di host yang sama
+SEPOLIA_RPC_URL="$(printf %s "$SEPOLIA_RPC_URL" | sed -e "s#^wss:#https:#" -e "s#^ws:#http:#" -e "s#/ws/v3/#/v3/#")"
 
-for v in SEPOLIA_RPC_URL DEPLOYER_ADDRESS SIGNER_1_ADDRESS SIGNER_2_ADDRESS SIGNER_3_ADDRESS; do
+ATTESTOR_VERIFIER_ADDRESS="${ATTESTOR_VERIFIER_ADDRESS:-${SIGNER_3_ADDRESS:-}}"; export ATTESTOR_VERIFIER_ADDRESS
+for v in SEPOLIA_RPC_URL DEPLOYER_ADDRESS OPERATOR_ADDRESS ATTESTOR_VERIFIER_ADDRESS; do
   [ -n "${!v:-}" ] || { echo "❌ $v masih kosong di $ROOT/.env"; exit 1; }
 done
 
-uniq_count=$(printf '%s\n' "$DEPLOYER_ADDRESS" "$SIGNER_1_ADDRESS" "$SIGNER_2_ADDRESS" "$SIGNER_3_ADDRESS" | tr 'A-F' 'a-f' | sort -u | wc -l | tr -d ' ')
-[ "$uniq_count" = "4" ] || { echo "❌ DEPLOYER dan 3 SIGNER harus 4 alamat berbeda"; exit 1; }
+uniq_count=$(printf '%s\n' "${ATTESTOR_PLATFORM_ADDRESS:-$OPERATOR_ADDRESS}" "$ATTESTOR_VERIFIER_ADDRESS" | tr 'A-F' 'a-f' | sort -u | wc -l | tr -d ' ')
+[ "$uniq_count" = "2" ] || { echo "❌ Slot PLATFORM dan VERIFIER harus alamat berbeda"; exit 1; }
 
 if [ ! -f "${FOUNDRY_KEYSTORE_DIR:-$HOME/.foundry/keystores}/deployer" ]; then
   echo "❌ Keystore 'deployer' belum ada. Jalankan dulu:"
@@ -31,7 +34,7 @@ echo "→ Build…"
 forge build >/dev/null
 
 echo "→ Simulasi (belum mengirim apa pun)…"
-forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --sender "$DEPLOYER_ADDRESS" 2>&1 | grep -E "AssetAttestation|Series |SeriesToken|Error|Revert" || true
+forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --sender "$DEPLOYER_ADDRESS" 2>&1 | grep -E "AttestationRegistry|platform|verifier|admin|Error|Revert" || true
 
 read -r -p "Lanjut deploy BENERAN ke Sepolia? (ketik 'ya') " ok
 [ "$ok" = "ya" ] || { echo "Dibatalkan."; exit 0; }
@@ -39,8 +42,6 @@ read -r -p "Lanjut deploy BENERAN ke Sepolia? (ketik 'ya') " ok
 VERIFY=()
 [ -n "${ETHERSCAN_API_KEY:-}" ] && VERIFY=(--verify)
 
-# Sepolia menghitung gas pembuatan kontrak jauh lebih besar dari simulasi lokal forge (~8x),
-# jadi limit gas dinaikkan. Gas yang tidak terpakai dikembalikan.
 forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --account deployer --sender "$DEPLOYER_ADDRESS" --broadcast --gas-estimate-multiplier 900 "${VERIFY[@]}"
 
 echo

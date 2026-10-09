@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "xendit:probe": "tsx --env-file=../../.env scripts/xendit-probe.ts",
     "reset:storage": "tsx --env-file=../../.env scripts/reset-storage.ts",
-    "staff:create": "tsx --env-file=../../.env scripts/create-staff.ts"
+    "staff:create": "tsx --env-file=../../.env scripts/create-staff.ts",
+    "chain:e2e": "tsx scripts/chain-e2e.ts",
+    "seed:demo": "tsx --env-file=../../.env scripts/seed-demo.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.65",

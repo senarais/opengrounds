@@ -19,3 +19,7 @@ packages/contracts/lib
 apps/*/AGENTS.md
 # dokumen kerja lokal (PRD, rencana, contoh data): tidak ikut git
 docs/
+# PRD kerja (lokal, salinan juga di ~/Downloads)
+Open_Grounds_PRD_*.md
+OG_PRD_v*.md
+/AGENTS.md
