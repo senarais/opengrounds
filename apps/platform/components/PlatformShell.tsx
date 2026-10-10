@@ -19,7 +19,19 @@ const destinations: Record<Role, { href: string; label: string }> = {
 export function PlatformShell({ me, header, footer, children }: { me: { role: Role } | null; header: ReactNode; footer: ReactNode; children: ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
+  const headerSentinel = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const sentinel = headerSentinel.current;
+    if (pathname !== "/" || !sentinel) return;
+    setScrolled(window.scrollY > 16);
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setScrolled(entry.intersectionRatio < 1);
+    }, { threshold: 1 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [pathname]);
   useEffect(() => {
     if (pathname !== "/" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const observer = new IntersectionObserver((entries) => {
@@ -35,8 +47,12 @@ export function PlatformShell({ me, header, footer, children }: { me: { role: Ro
   useEffect(() => {
     if (!menuOpen) return;
     const close = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenuOpen(false); menuButton.current?.focus(); } };
+    const desktop = window.matchMedia("(min-width: 901px)");
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    closeOnDesktop();
+    desktop.addEventListener("change", closeOnDesktop);
     window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
+    return () => { window.removeEventListener("keydown", close); desktop.removeEventListener("change", closeOnDesktop); };
   }, [menuOpen]);
 
   if (pathname !== "/") return <>{header}{children}{footer}</>;
@@ -45,8 +61,9 @@ export function PlatformShell({ me, header, footer, children }: { me: { role: Ro
   return (
     <div className="og-site" lang="en">
       <a className="og-skip-link" href="#main-content">Skip to content</a>
+      <span ref={headerSentinel} className="og-header-sentinel" aria-hidden="true" />
       <div className="og-demo-strip"><span>ETHJKT 2026 · Ethereum Sepolia</span><span>Testnet demo. No real money.</span></div>
-      <header className="og-header">
+      <header className="og-header" data-scrolled={scrolled || undefined} data-open={menuOpen || undefined}>
         <div className="og-wrap og-header-inner">
           <Link className="og-brand" href="/" aria-label="Open Grounds home"><Image src="/og-logo.png" width={38} height={42} alt="" /><span>open<span>grounds</span></span></Link>
           <nav className="og-desktop-nav" aria-label="Main navigation"><Link href="/products">Explore venues</Link><a href="#how-it-works">How it works</a><a href="#for-owners">For venue owners</a></nav>

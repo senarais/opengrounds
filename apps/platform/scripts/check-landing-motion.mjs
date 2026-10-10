@@ -29,10 +29,23 @@ try {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(url, { waitUntil: "networkidle" });
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForSelector('.og-hero-mesh[data-ready="true"]');
   await page.waitForSelector('.og-hero-flow[data-ready="true"]');
   await page.waitForTimeout(200);
+  const header = page.locator(".og-header");
+  const surface = () => header.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const headerHeight = (await header.boundingBox()).height;
+  const heroTop = await page.locator(".og-hero").evaluate((el) => el.getBoundingClientRect().top + scrollY);
+  assert.equal(await surface(), "rgba(0, 0, 0, 0)", "header is transparent over the hero");
+  assert.ok(Math.abs((await header.boundingBox()).y - heroTop) < 1, "hero starts behind the navigation");
+  await page.evaluate(() => scrollTo(0, 80));
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".og-header")).backgroundColor === "rgb(255, 255, 255)");
+  assert.equal((await header.boundingBox()).height, headerHeight, "scroll does not resize navigation");
+  assert.equal((await header.boundingBox()).y, 0, "white header remains sticky");
+  assert.equal(await page.locator(".og-hero").evaluate((el) => el.getBoundingClientRect().top + scrollY), heroTop, "surface change does not shift the hero");
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".og-header")).backgroundColor === "rgba(0, 0, 0, 0)");
   const counts = () => page.evaluate(() => ({ ...window.framesDrawn }));
   let before = await counts();
   await page.waitForTimeout(200);
@@ -56,6 +69,16 @@ try {
     assert.ok(await page.locator(".og-hero canvas").evaluateAll((cs) => cs.every((c) => c.width * c.height <= 1_200_000)), "bounded render resolution");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no overflow at ${width}px`);
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileHeroTop = await page.locator(".og-hero").evaluate((el) => el.getBoundingClientRect().top + scrollY);
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".og-header")).backgroundColor === "rgb(255, 255, 255)");
+  assert.equal(await page.locator(".og-hero").evaluate((el) => el.getBoundingClientRect().top + scrollY), mobileHeroTop, "mobile menu overlays rather than pushing the hero");
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#og-mobile-nav").isVisible(), false);
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForFunction(() => !document.querySelector(".og-header").hasAttribute("data-open"));
   await page.locator(".og-footer").scrollIntoViewIfNeeded();
   await page.waitForTimeout(150);
   before = await counts();
@@ -77,12 +100,12 @@ try {
       return type === "webgl" || type === "webgl2" ? null : original.call(this, type, ...args);
     };
   });
-  await fallback.goto(url, { waitUntil: "networkidle" });
+  await fallback.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await fallback.waitForSelector('.og-hero-flow[data-ready="true"]');
   assert.equal(await fallback.locator(".og-hero-mesh").getAttribute("data-ready"), null);
   assert.ok(await fallback.locator("#hero-title").isVisible(), "fallback keeps the headline");
   assert.ok(await fallback.locator(".og-hero").getByRole("link", { name: "Explore venues" }).isVisible(), "fallback keeps the primary action");
-  console.log("PASS: mesh/flow render, pause, reduced-motion, off-screen suspension, pixel cap, responsive layout, dark contrast, and WebGL fallback.");
+  console.log("PASS: transparent/sticky header, stable layout, mobile menu, mesh/flow render, pause, reduced-motion, off-screen suspension, pixel cap, dark contrast, and WebGL fallback.");
 } finally {
   await browser.close();
 }

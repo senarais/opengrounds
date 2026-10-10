@@ -56,6 +56,33 @@ remains readable before hydration or when WebGL is unavailable/lost.
 `landing-grain.svg` adds static, tiled fractal grain to paper, orange, and black
 surfaces. Its maximum black alpha is 12%, so texture does not sacrifice readability.
 
+## Navigation revision
+
+References inspected in source:
+
+- [The Hoxton](https://thehoxton.com/): fixed, transparent header over the opening
+  media, with a distinct booking CTA. This supplies the overlay hierarchy.
+- [Rana Grounds sticky-header CSS](https://ranagrounds.id/wp-content/plugins/sticky-header-effects-for-elementor/assets/css/she-header-style.css):
+  `.she-header-transparent-yes` uses a transparent overlay; the sticky header
+  transitions background and border colors over 400ms. Open Grounds adapts this
+  to a shorter 220ms surface transition.
+
+The landing header overlays the orange hero at the top, then becomes opaque white
+after approximately 16px of scroll. A 1px IntersectionObserver sentinel drives
+state changes without a per-scroll render loop. Header height is fixed at 88px
+(74px on compact screens); only background/shadow change, preventing layout jumps.
+The hero extends behind it, and flow marks are masked away from navigation text.
+
+An open mobile menu always has a white surface. Its panel overlays content rather
+than pushing the hero, is scrollable on short screens, closes on Escape with focus
+returned to the trigger, and closes when switching to desktop width. Scroll state
+is re-read when returning to the landing. Reduced-motion disables the transition;
+reduced-transparency or increased-contrast preferences keep the header opaque.
+
+Apple's `materials.md › Liquid Glass` supplied the principle of a distinct,
+legible functional layer over content; the web implementation uses opaque white
+after scroll rather than requiring blur/translucency.
+
 ## Tokens and accessibility
 
 Reuse Plus Jakarta Sans (display) and Inter (body) from the existing system.
@@ -130,4 +157,5 @@ than inferring animation from styles.
 Browser checks: 320/390/768/1440px, 200% text, FAQ keyboard interaction, menu
 Escape/close, English copy, valid local images, gallery and background pause/resume,
 reduced-motion, off-screen rendering suspension, bounded canvas size, WebGL
-fallback/context loss, legacy route navigation, and axe accessibility scan.
+fallback/context loss, transparent/white header states without layout shifts,
+mobile-menu resizing, legacy route navigation, and axe accessibility scan.
