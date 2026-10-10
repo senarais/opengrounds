@@ -18,7 +18,7 @@ import { addSignature, createAttestation, isReady, markSubmitted, signAsPlatform
  *   6. dana jatah ke rekening distribusi → kredit saldo investor → settlePayout (tidak bisa melebihi kewajiban)
  */
 export const PERIOD_STATUS_LABEL: Record<string, string> = {
-  awaiting_owner: "Menunggu tanda tangan owner", disputed: "Disengketakan", posted: "Diposting on-chain", awaiting_topup: "Menunggu kekurangan dari owner", paid: "Jatah sudah dikreditkan",
+  awaiting_owner: "Awaiting owner approval", disputed: "Disputed", posted: "Posted on-chain", awaiting_topup: "Owner top-up required", paid: "Credited to investors",
 };
 const ATT_WINDOW_DAYS = 10;
 const TOPUP_SECONDS = 24 * 3600;
@@ -50,13 +50,13 @@ export async function ingestSplits(seriesId: string) {
 // ---------------------------------------------------------------- 2. biaya dan penutupan periode
 
 export async function submitExpense(seriesId: string, actor: string, e: { category: string; amount: number; documentId?: string | null; note?: string }) {
-  if (!Number.isInteger(e.amount) || e.amount <= 0) throw new Error("Nominal harus rupiah bulat > 0");
+  if (!Number.isInteger(e.amount) || e.amount <= 0) throw new Error("Enter a positive whole-rupiah amount.");
   const no = (await lastPeriodNo(seriesId)) + 1;
   const status = e.amount > DEMO_PARAMS.expenseReviewThreshold && e.category !== "operator_fee" && e.category !== "reserve" ? "pending" : "approved";
   const { error } = await platformDb().from("expense_items").insert({ series_id: seriesId, period_no: no, category: e.category, amount: e.amount, document_id: e.documentId ?? null, status, note: e.note ?? null });
   if (error) throw new Error(error.message);
   await audit(actor, "expense.submit", { entity: "series", entityId: seriesId, after: e });
-  return status === "pending" ? "Biaya tercatat; di atas ambang, menunggu tinjauan reviewer." : "Biaya tercatat untuk periode berjalan.";
+  return status === "pending" ? "Expense recorded. It exceeds the review threshold and is awaiting approval." : "Expense recorded for the current period.";
 }
 
 export async function reviewExpense(id: string, actor: string, approve: boolean, note: string) {
@@ -102,15 +102,15 @@ export async function closePeriod(seriesId: string, actor: string) {
   await ingestSplits(seriesId);
   const pf = platformDb();
   const { data: open } = await pf.from("revenue_periods").select("period_no, status").eq("series_id", seriesId).in("status", ["awaiting_owner", "disputed"]).maybeSingle();
-  if (open) throw new Error(`Periode ${open.period_no} masih ${PERIOD_STATUS_LABEL[open.status]}`);
+  if (open) throw new Error(`Period ${open.period_no} is still ${PERIOD_STATUS_LABEL[open.status]}.`);
   const { data: prev } = await pf.from("revenue_periods").select("period_end").eq("series_id", seriesId).order("period_no", { ascending: false }).limit(1).maybeSingle();
   const { data: acq } = await pf.from("attestations").select("created_at").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("status", "submitted").single();
   const start = new Date(prev?.period_end ?? acq!.created_at);
   // periodEnd harus ≤ waktu blok saat posting: mundurkan 60 detik dari sekarang
   const end = new Date(Math.floor((Date.now() - 60_000) / 1000) * 1000);
-  if (end <= start) throw new Error("Periode terlalu pendek");
+  if (end <= start) throw new Error("The period is too short to close.");
   const { periodNo, w, pendingItems } = await draftWaterfall(seriesId, start, end);
-  if (pendingItems) throw new Error(`${pendingItems} biaya masih menunggu tinjauan reviewer`);
+  if (pendingItems) throw new Error(`${pendingItems} expenses are still awaiting review.`);
   checkWaterfall(w, ctx.series.max_opex_bps);
   const r = waterfall(w, ctx.series.stake_bps, ctx.series.spv_fee_bps);
   const { data: splits } = await pf.from("split_events").select("spv_amount").eq("series_id", seriesId).gte("settled_at", start.toISOString()).lt("settled_at", end.toISOString());
@@ -129,7 +129,7 @@ export async function closePeriod(seriesId: string, actor: string) {
   const att = await createAttestation({ seriesId, kind: "REVENUE_PERIOD", refId: periodNo, payload: { periodNo, periodEnd: String(periodEnd), waterfall: w, evidenceHash }, payloadHash, evidenceHash, deadline: new Date(Date.now() + ATT_WINDOW_DAYS * 86_400_000) });
   await signAsPlatform(att.id, addr);
   await audit(actor, "period.close", { entity: "series", entityId: seriesId, after: { periodNo, distributable: r.distributable, pInv: r.pInv } });
-  return `Periode ${periodNo} ditutup: D ${rp(r.distributable)}, jatah investor ${rp(r.pInv)}. Menunggu tanda tangan owner.`;
+  return `Period ${periodNo} closed: distributable profit ${rp(r.distributable)}, investor pool ${rp(r.pInv)}. Awaiting owner signature.`;
 }
 
 // ---------------------------------------------------------------- 3. tanda tangan owner / verifier, sengketa
@@ -144,18 +144,18 @@ export async function signPeriod(seriesId: string, periodNo: number, signature: 
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const { data: per } = await platformDb().from("revenue_periods").select("*").eq("series_id", seriesId).eq("period_no", periodNo).single();
-  if (per.status !== "awaiting_owner") throw new Error(`Periode ${PERIOD_STATUS_LABEL[per.status]}`);
+  if (per.status !== "awaiting_owner") throw new Error(`Period status: ${PERIOD_STATUS_LABEL[per.status]}.`);
   const att = await periodAttestation(seriesId, periodNo);
   const ownerSilent = Date.now() > Date.parse(per.owner_deadline);
   const { att: updated, slot } = await addSignature(att.id, addr, signature, { ownerSilent });
-  if (slot === "VERIFIER" && !ownerSilent) throw new Error("Verifier hanya boleh menggantikan owner setelah jendela tanda tangan owner lewat");
-  if (!isReady(updated)) return "Tanda tangan tersimpan.";
+  if (slot === "VERIFIER" && !ownerSilent) throw new Error("A verifier may sign for the owner only after the owner-signing window closes.");
+  if (!isReady(updated)) return "Signature saved. Waiting for the other signer.";
   return postPeriod(seriesId, periodNo);
 }
 
 /** Owner tidak setuju dengan angka: sengketa dicatat dan ditandai on-chain (item ditahan, item lain jalan). Verifier menengahi. */
 export async function disputePeriod(seriesId: string, periodNo: number, actor: string, reason: string) {
-  if (reason.trim().length < 10) throw new Error("Jelaskan angka mana yang tidak sesuai (minimal 10 karakter)");
+  if (reason.trim().length < 10) throw new Error("Explain which figure is incorrect (at least 10 characters).");
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const itemRef = await publicClient.readContract({ address: addr, abi: venueSeriesAbi, functionName: "periodRef", args: [BigInt(periodNo)] });
@@ -165,7 +165,7 @@ export async function disputePeriod(seriesId: string, periodNo: number, actor: s
   await pf.from("revenue_periods").update({ status: "disputed" }).eq("series_id", seriesId).eq("period_no", periodNo);
   await pf.from("series").update({ status: (await readSeries(addr)).state }).eq("id", seriesId);
   await audit(actor, "period.dispute", { entity: "series", entityId: seriesId, detail: { periodNo, reason, tx } });
-  return "Sengketa dicatat on-chain. Verifier independen akan menengahi; periode ini ditahan.";
+  return "Dispute recorded on-chain. An independent verifier will resolve it; this period is paused.";
 }
 
 /**
@@ -173,10 +173,10 @@ export async function disputePeriod(seriesId: string, periodNo: number, actor: s
  * Eksekusi on-chain lewat peran ADMIN atas keputusan verifier (demo; production: verifier mengirim sendiri).
  */
 export async function resolvePeriodDispute(disputeId: string, actor: string, resolution: string) {
-  if (resolution.trim().length < 10) throw new Error("Tulis dasar keputusan (minimal 10 karakter)");
+  if (resolution.trim().length < 10) throw new Error("Enter the decision basis (at least 10 characters).");
   const pf = platformDb();
   const { data: d } = await pf.from("disputes").select("*").eq("id", disputeId).single();
-  if (d.status !== "open") throw new Error("Sengketa sudah selesai");
+  if (d.status !== "open") throw new Error("This dispute is already resolved.");
   const ctx = await getSeries(d.series_id);
   const addr = needContract(ctx);
   const tx = await operatorSend(addr, venueSeriesAbi as any, "resolveDispute", [d.item_ref, evidenceHashOf(resolution)]);
@@ -191,7 +191,7 @@ export async function resolvePeriodDispute(disputeId: string, actor: string, res
   }
   await pf.from("series").update({ status: (await readSeries(addr)).state }).eq("id", d.series_id);
   await audit(actor, "dispute.resolve", { entity: "disputes", entityId: disputeId, after: { resolution, tx } });
-  return "Sengketa selesai. Tutup periode lagi untuk menghitung ulang angka.";
+  return "Dispute resolved. Close the period again to recalculate the figures.";
 }
 
 // ---------------------------------------------------------------- 4–6. posting, koreksi, pembayaran jatah
@@ -202,7 +202,7 @@ export async function postPeriod(seriesId: string, periodNo: number) {
   const pf = platformDb();
   const { data: per } = await pf.from("revenue_periods").select("*").eq("series_id", seriesId).eq("period_no", periodNo).single();
   const att = await periodAttestation(seriesId, periodNo);
-  if (!isReady(att)) throw new Error("Tanda tangan belum lengkap");
+  if (!isReady(att)) throw new Error("Required signatures are not complete.");
   const w: Waterfall = { gross: Number(per.gross), refunds: Number(per.refunds), opex: Number(per.opex), tax: Number(per.tax), operatorFee: Number(per.operator_fee), reserve: Number(per.reserve), platformFee: Number(per.platform_fee) };
   const periodEnd = BigInt(Math.floor(Date.parse(per.period_end) / 1000));
   const tx = await operatorSend(addr, venueSeriesAbi as any, "postRevenuePeriod", [BigInt(periodNo), periodEnd, toChainWaterfall(w), per.evidence_hash, BigInt(Math.floor(Date.parse(att.deadline) / 1000)), sigsOf(att)]);
@@ -232,7 +232,7 @@ export async function settleTrueUp(seriesId: string, periodNo: number, returnBas
     const charge = await provider().createCharge({ amount: -diff, reference: `trueup-${seriesId.slice(0, 8)}-${periodNo}`, description: `Kekurangan koreksi periode ${periodNo} · ${ctx.venue.name}`, returnUrl: `${returnBase}/owner?topup=${periodNo}`, seconds: TOPUP_SECONDS });
     await pf.from("revenue_periods").update({ status: "awaiting_topup", topup_psp_ref: charge.pspRef, topup_url: charge.checkoutUrl }).eq("id", per.id);
   }
-  return `Periode ${periodNo} diposting. Kantong SPV kurang ${rp(-diff)} dari hak SPV; owner perlu melengkapi sebelum tenggat.`;
+  return `Period ${periodNo} posted. The SPV pocket is ${rp(-diff)} short; the owner must top it up before the deadline.`;
 }
 
 /** Cek pembayaran kekurangan owner; bila lunas, lanjut bayar jatah. */
@@ -256,12 +256,12 @@ async function payout(seriesId: string, periodNo: number) {
   const addr = needContract(ctx);
   const pf = platformDb();
   const { data: per } = await pf.from("revenue_periods").select("*").eq("series_id", seriesId).eq("period_no", periodNo).single();
-  if (per.status === "paid") return `Periode ${periodNo} sudah dibayar.`;
+  if (per.status === "paid") return `Period ${periodNo} is already paid.`;
   const p = await readPeriod(addr, periodNo);
   const rc = await publicClient.getTransactionReceipt({ hash: per.posted_tx as Hex });
   const credits = await creditsAt(seriesId, ctx.series.token_address as Address, rc.blockNumber, p.deltaE18);
   const total = credits.reduce((a, c) => a + c.amount, 0);
-  if (BigInt(total) > p.owedIdr) throw new Error("Kredit melebihi kewajiban on-chain (tidak boleh terjadi)");
+  if (BigInt(total) > p.owedIdr) throw new Error("Credit exceeds the on-chain obligation.");
   const pSpv = Number(per.p_spv), fSpv = Number(per.f_spv);
   await moveCash(seriesId, `payout-${seriesId}-${periodNo}`, [["spv_pocket", -pSpv], ["distribution", total], ["spv_ops", fSpv], ["spv_capital", pSpv - fSpv - total]]);
   const { data: users } = await pf.from("users").select("id, wallet").in("wallet", credits.map((c) => c.wallet));
@@ -276,7 +276,7 @@ async function payout(seriesId: string, periodNo: number) {
   if (total > 0) tx = await operatorSend(addr, venueSeriesAbi as any, "settlePayout", [BigInt(periodNo), BigInt(total), root]);
   await pf.from("revenue_periods").update({ status: "paid", paid_idr: total, payout_root: root, payout_tx: tx }).eq("id", per.id);
   await audit("platform", "period.payout", { entity: "series", entityId: seriesId, after: { periodNo, total, holders: credits.length, tx } });
-  return `Periode ${periodNo}: ${rp(total)} dikreditkan ke saldo ${rows.length} investor.`;
+  return `Period ${periodNo}: ${rp(total)} credited to ${rows.length} investor balances.`;
 }
 
 /** Saldo pemegang (di luar treasury) pada blok posting dan jatah masing-masing. */

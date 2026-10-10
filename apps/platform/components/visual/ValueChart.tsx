@@ -5,13 +5,13 @@ export interface ValuePoint { t: string; v: number }
 
 const W = 560, H = 220, PAD = { l: 64, r: 16, t: 16, b: 30 };
 const LINE = "#c25a00"; // Sunrise gelap: lolos kontras ≥ 3:1 di atas putih (Sunrise murni 2,6:1)
-const rpShort = (n: number) => (n >= 1e9 ? `Rp${(n / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 1 })} M` : n >= 1e6 ? `Rp${(n / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt` : n >= 1e3 ? `Rp${(n / 1e3).toLocaleString("id-ID", { maximumFractionDigits: 0 })} rb` : `Rp${Math.round(n)}`);
+const rpShort = (n: number) => (n >= 1e9 ? `Rp${(n / 1e9).toLocaleString("en-US", { maximumFractionDigits: 1 })}b` : n >= 1e6 ? `Rp${(n / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })}m` : n >= 1e3 ? `Rp${(n / 1e3).toLocaleString("en-US", { maximumFractionDigits: 0 })}k` : `Rp${Math.round(n)}`);
 const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
-const day = (iso: string) => new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "2-digit" });
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
 
 /**
- * Riwayat nilai tebus token yang dipegang (bukan harga pasar). Garis bertangga: nilai naik saat periode kantong difinalkan
- * dan turun saat ada redeem yang dibayar. Garis putus-putus = yang sudah dibayar (titik impas).
+ * Historical redemption value, not market price. Steps rise when distributions settle and fall when redemptions are paid.
+ * Dashed line marks the amount paid.
  */
 export function ValueChart({ points, paid, title }: { points: ValuePoint[]; paid: number; title: string }) {
   const [hover, setHover] = useState<number | null>(null);
@@ -49,9 +49,9 @@ export function ValueChart({ points, paid, title }: { points: ValuePoint[]; paid
 
   return (
     <figure className="vchart">
-      <figcaption className="small"><b>{title}</b> <span className="muted">· estimasi, bukan harga pasar</span></figcaption>
+      <figcaption className="small"><b>{title}</b> <span className="muted">· estimate, not a market price</span></figcaption>
       <div className="vchart-wrap">
-        <svg ref={svg} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: dari ${rp(points[0]!.v)} menjadi ${rp(last.v)}; sudah dibayar ${rp(paid)}`}
+        <svg ref={svg} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: from ${rp(points[0]!.v)} to ${rp(last.v)}; amount paid ${rp(paid)}`}
           onPointerMove={onMove} onPointerLeave={() => setHover(null)} style={{ width: "100%", height: "auto", touchAction: "pan-y" }}>
           {geo.ticks.map((v) => (
             <g key={v}>
@@ -63,7 +63,7 @@ export function ValueChart({ points, paid, title }: { points: ValuePoint[]; paid
           <text x={W - PAD.r} y={H - 8} fontSize={11} fill="var(--muted)" textAnchor="end">{day(last.t)}</text>
           {/* titik impas */}
           <line x1={PAD.l} x2={W - PAD.r} y1={geo.y(paid)} y2={geo.y(paid)} stroke="var(--slate)" strokeWidth={1.5} strokeDasharray="5 4" />
-          <text x={W - PAD.r - 4} y={geo.y(paid) - 6} textAnchor="end" fontSize={11} fill="var(--text-2)" fontWeight={600}>Sudah dibayar {rpShort(paid)}</text>
+          <text x={W - PAD.r - 4} y={geo.y(paid) - 6} textAnchor="end" fontSize={11} fill="var(--text-2)" fontWeight={600}>Amount paid {rpShort(paid)}</text>
           <path d={geo.d} fill="none" stroke={LINE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           <circle cx={geo.x(geo.ts[geo.ts.length - 1]!)} cy={geo.y(last.v)} r={4.5} fill={LINE} stroke="var(--surface)" strokeWidth={2} />
           {hp && (
@@ -77,14 +77,14 @@ export function ValueChart({ points, paid, title }: { points: ValuePoint[]; paid
           <div className="vchart-tip" style={{ left: `${(geo.x(geo.ts[hover!]!) / W) * 100}%` }} role="status">
             <div className="muted">{day(hp.t)}</div>
             <b>{rp(hp.v)}</b>
-            <div className="muted">{paid > 0 ? `${Math.round((hp.v / paid) * 100)}% dari yang dibayar` : ""}</div>
+            <div className="muted">{paid > 0 ? `${Math.round((hp.v / paid) * 100)}% of amount paid` : ""}</div>
           </div>
         )}
       </div>
       <details className="disclose" style={{ marginTop: 6 }}>
-        <summary>Lihat sebagai tabel</summary>
+        <summary>View as a table</summary>
         <div className="body">
-          <table className="table"><thead><tr><th>Tanggal</th><th className="r">Nilai tebus</th></tr></thead>
+          <table className="table"><thead><tr><th>Date</th><th className="r">Redemption value</th></tr></thead>
             <tbody>{points.map((p, i) => <tr key={i}><td>{day(p.t)}</td><td className="r num">{rp(p.v)}</td></tr>)}</tbody></table>
         </div>
       </details>

@@ -15,7 +15,8 @@ import { disputeAction, expenseAction, removeExpenseAction, resubmitAction, topu
 
 export const dynamic = "force-dynamic";
 const POS_URL = process.env.POS_URL ?? "http://localhost:3001";
-const CATEGORIES = [["opex", "Biaya operasional (listrik, gaji, perawatan)"], ["operator_fee", "Fee operator"], ["reserve", "Cadangan venue"]];
+export const metadata = { title: "Venue details · Owner portal" };
+const CATEGORIES = [["opex", "Operating expenses"], ["operator_fee", "Operator fee"], ["reserve", "Venue reserve"]];
 
 export default async function OwnerVenue({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
   const { id } = await params;
@@ -47,72 +48,72 @@ export default async function OwnerVenue({ params, searchParams }: { params: Pro
   return (
     <div className="container">
       <AutoRefresh seconds={20} />
-      <PageHeader eyebrow="Owner" title={v.name} lead={`${v.city}, ${v.province}`}>{v.pos_company_id && <a className="btn dark" href={POS_URL} target="_blank" rel="noreferrer">Buka PoS ↗</a>}</PageHeader>
+      <PageHeader eyebrow="Owner portal" title={v.name} lead={`${v.city}, ${v.province}`}>{v.pos_company_id && <a className="btn dark" href={POS_URL} target="_blank" rel="noreferrer">Open PoS ↗</a>}</PageHeader>
       <Flash ok={sp.ok} err={sp.err} />
-      {!me.wallet && <Notice tone="warn" title="Wallet Anda sedang dibuat.">Wallet dipakai untuk menandatangani akuisisi dan angka laba bulanan (tanpa gas). <WalletStatus /></Notice>}
+      {!me.wallet && <Notice tone="warn" title="Your wallet is being prepared.">Use it to sign the acquisition and monthly profit figures. The platform covers transaction gas. <WalletStatus /></Notice>}
 
-      <Card title="Verifikasi (KYB)" subtitle="Pemeriksaan otomatis lalu tinjauan reviewer manusia" className="mt">
+      <Card title="KYB review" subtitle="Automated checks followed by independent human review" className="mt">
         <div className="row"><Badge tone={kc?.status === "APPROVED" ? "ok" : kc?.status === "REJECTED" ? "bad" : kc?.status === "NEEDS_INFO" ? "warn" : "info"}>{KYB_STATUS_LABEL[kc?.status ?? "DRAFT"]}</Badge></div>
-        {kc?.decision_note && <p className="small" style={{ marginTop: 8 }}><b>Catatan reviewer:</b> {kc.decision_note}</p>}
-        {kc?.status === "NEEDS_INFO" && <form action={resubmitAction}><input type="hidden" name="venueId" value={id} /><button className="btn" style={{ marginTop: 8 }}>Saya sudah melengkapi, periksa ulang</button><p className="small muted">Perubahan data dilakukan lewat pengajuan baru bila diperlukan; hubungi tim untuk menambah dokumen.</p></form>}
-        {kc?.status === "REJECTED" && <p className="small muted">Anda dapat melengkapi data dan mengajukan ulang sebagai pengajuan baru.</p>}
+        {kc?.decision_note && <p className="small" style={{ marginTop: 8 }}><b>Reviewer note:</b> {kc.decision_note}</p>}
+        {kc?.status === "NEEDS_INFO" && <form action={resubmitAction}><input type="hidden" name="venueId" value={id} /><button className="btn" style={{ marginTop: 8 }}>Resubmit for review</button></form>}
+        {kc?.status === "REJECTED" && <p className="small muted">Submit a new application after addressing the reviewer’s notes.</p>}
       </Card>
 
-      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="Review disetujui">Platform sedang menyiapkan tanda tangan akuisisi. Setelah tersedia, periksa detail pengalihan hak dan pembayaran lalu tanda tangani lewat wallet Anda.</Notice></div>}
+      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="Review approved">The platform is preparing the acquisition signature. Review the rights transfer and simulated payment details, then sign with your wallet.</Notice></div>}
       {acq && (
-        <Card title="Tanda tangan akuisisi" subtitle="ACQUISITION_CLOSED: platform + owner" tone="accent" className="mt">
-          <p className="small">Anda adalah penjual. Dengan menandatangani, Anda menyatakan: hak manfaat ekonomi <b>{(s!.stake_bps / 100).toLocaleString("id-ID")}%</b> atas laba bersih venue ini dialihkan ke Grounds, dan dana <b>{rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}</b> sudah Anda terima (<b>simulasi</b>, tidak ada uang sungguhan). Setelah tanda tangan platform dan Anda lengkap, {Number(s!.supply).toLocaleString("id-ID")} token dicetak sekali ke treasury Grounds.</p>
-          <KV rows={[["Valuasi (V)", rp(Number(s!.valuation_idr))], ["Harga referensi", rp(Number(s!.ref_price))], ["Grounds (SPV) via Open Grounds", (acq.signatures ?? []).some((x: any) => x.slot === "PLATFORM") ? <Badge tone="ok">sudah</Badge> : "belum"], ["Anda", acqSigned ? <Badge tone="ok">sudah</Badge> : "belum"]]} />
-          {!acqSigned && <div style={{ marginTop: 10 }}><AttestSignButton attId={acq.id} via="privy" chainId={chain.id} label="Tanda tangani akuisisi (simulasi)" confirmText={`Anda menyatakan ${(s!.stake_bps / 100).toLocaleString("id-ID")}% hak manfaat ekonomi atas laba bersih yang bisa dibagikan dari ${v.name} dialihkan ke Grounds, dan dana ${rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))} telah diterima. Ini simulasi di testnet; tidak ada uang sungguhan yang dipindahkan.`} /></div>}
+        <Card title="Acquisition signature" subtitle="ACQUISITION_CLOSED · platform + owner" tone="accent" className="mt">
+          <p className="small">By signing, you confirm that <b>{(s!.stake_bps / 100).toLocaleString("en-US")}%</b> of this venue’s distributable net profit rights transfer to Grounds and that you received <b>{rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}</b> (<b>simulated</b>; no money moves). Once both signatures are complete, {Number(s!.supply).toLocaleString("en-US")} tokens are minted to the Grounds treasury.</p>
+          <KV rows={[["Valuation (V)", rp(Number(s!.valuation_idr))], ["Reference price", rp(Number(s!.ref_price))], ["Grounds · platform", (acq.signatures ?? []).some((x: any) => x.slot === "PLATFORM") ? <Badge tone="ok">Signed</Badge> : "Awaiting"], ["Owner", acqSigned ? <Badge tone="ok">Signed</Badge> : "Awaiting"]]} />
+          {!acqSigned && <div style={{ marginTop: 10 }}><AttestSignButton attId={acq.id} via="privy" chainId={chain.id} label="Review & sign acquisition" confirmText={`You confirm that ${(s!.stake_bps / 100).toLocaleString("en-US")}% of ${v.name}’s distributable net profit rights transfer to Grounds, and that you received ${rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}. This is a testnet simulation; no real money moves.`} /></div>}
         </Card>
       )}
 
       {s && info && (
         <>
           <div className="grid c3 mt">
-            <Card title="Seri"><Badge tone={info.state === "Active" ? "ok" : "warn"}>{info.state}</Badge><div className="small muted" style={{ marginTop: 6 }}>{Number(info.supply).toLocaleString("id-ID")} token · beredar {Number(info.circulating).toLocaleString("id-ID")}</div></Card>
-            <Card title="Kantong SPV periode ini" subtitle="Split harian dari gateway (sandbox)"><div className="big-amount">{rp(pocket)}</div><div className="small muted">{s.split_bps / 100}% tiap pembayaran booking. Dikoreksi ke hak SPV saat tutup periode.</div></Card>
-            <Card title="Diterima owner (simulasi)"><div className="big-amount">{rp(ownerCash)}</div><div className="small muted">dana akuisisi + sisa split harian − fee platform ± koreksi</div></Card>
+            <Card title="Series"><Badge tone={info.state === "Active" ? "ok" : "warn"}>{info.state}</Badge><div className="small muted" style={{ marginTop: 6 }}>{Number(info.supply).toLocaleString("en-US")} tokens · {Number(info.circulating).toLocaleString("en-US")} circulating</div></Card>
+            <Card title="SPV pocket · current period" subtitle="Daily split from booking payments · sandbox"><div className="big-amount">{rp(pocket)}</div><div className="small muted">{s.split_bps / 100}% of each booking payment; reconciled at period close.</div></Card>
+            <Card title="Owner receipts · simulated"><div className="big-amount">{rp(ownerCash)}</div><div className="small muted">Acquisition funds + daily split − platform fee ± true-up</div></Card>
           </div>
 
           {info.state !== "Verified" && (
-            <Card title="Biaya periode berjalan" subtitle="Biaya diajukan dengan bukti; hanya yang disetujui masuk waterfall. Di atas ambang ditinjau reviewer." className="mt">
+            <Card title="Current-period expenses" subtitle="Only approved expenses enter the monthly waterfall." className="mt">
               <form action={expenseAction} className="grid c3" style={{ alignItems: "end" }}>
                 <input type="hidden" name="venueId" value={id} /><input type="hidden" name="seriesId" value={s.id} />
-                <label className="field">Kategori<select className="input" name="category">{CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-                <label className="field">Nominal (Rp)<input className="input" name="amount" type="number" min={1} required /></label>
-                <label className="field">Catatan / nomor bukti<input className="input" name="note" /></label>
-                <button className="btn primary">Catat biaya</button>
+                <label className="field">Category<select className="input" name="category">{CATEGORIES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+                <label className="field">Amount · Rp<input className="input" name="amount" type="number" min={1} required /></label>
+                <label className="field">Note or receipt reference<input className="input" name="note" /></label>
+                <button className="btn primary">Add expense</button>
               </form>
-              {items.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{items.map((i) => <tr key={i.id}><td>{i.category}</td><td>{rp(Number(i.amount))}</td><td>{i.note}</td><td><Badge tone={i.status === "approved" ? "ok" : i.status === "rejected" ? "bad" : "warn"}>{i.status === "pending" ? "menunggu tinjauan" : i.status === "approved" ? "disetujui" : "ditolak"}</Badge></td><td>{i.status === "pending" && <form action={removeExpenseAction}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="id" value={i.id} /><button className="btn sm ghost">Hapus</button></form>}</td></tr>)}</tbody></table>}
-              {draft && <p className="small muted" style={{ marginTop: 8 }}>Perkiraan sementara periode {draft.periodNo}: omzet kotor {rp(draft.w.gross)}, biaya {rp(draft.w.opex)} (termasuk fee gateway), pajak {rp(draft.w.tax)}.</p>}
+              {items.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{items.map((i) => <tr key={i.id}><td>{i.category}</td><td>{rp(Number(i.amount))}</td><td>{i.note}</td><td><Badge tone={i.status === "approved" ? "ok" : i.status === "rejected" ? "bad" : "warn"}>{i.status === "pending" ? "Pending review" : i.status === "approved" ? "Approved" : "Declined"}</Badge></td><td>{i.status === "pending" && <form action={removeExpenseAction}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="id" value={i.id} /><button className="btn sm ghost">Remove</button></form>}</td></tr>)}</tbody></table>}
+              {draft && <p className="small muted" style={{ marginTop: 8 }}>Current estimate · period {draft.periodNo}: gross {rp(draft.w.gross)}, expenses {rp(draft.w.opex)} including gateway fees, tax {rp(draft.w.tax)}.</p>}
             </Card>
           )}
 
-          <div className="section-title mt"><h2>Periode bulanan</h2></div>
-          {periods.length === 0 ? <Card><p className="muted small">Belum ada periode. Operator menutup periode (di production tiap akhir bulan).</p></Card> : periods.map((p) => {
+          <div className="section-title mt"><h2>Monthly periods</h2></div>
+          {periods.length === 0 ? <Card><p className="muted small">No period has been closed yet.</p></Card> : periods.map((p) => {
             const att = (atts ?? []).find((a) => a.kind === "REVENUE_PERIOD" && Number(a.ref_id) === p.period_no);
             const signed = att && (att.signatures ?? []).some((x: any) => x.slot === "COUNTERPARTY");
             return (
-              <Card key={p.id} title={`Periode ${p.period_no}`} subtitle={`${dt(p.period_start)} → ${dt(p.period_end)}`} className="mt">
+              <Card key={p.id} title={`Period ${p.period_no}`} subtitle={`${dt(p.period_start)} → ${dt(p.period_end)}`} className="mt">
                 <div className="row" style={{ marginBottom: 8 }}><Badge tone={p.status === "paid" ? "ok" : p.status === "disputed" ? "bad" : "warn"}>{PERIOD_STATUS_LABEL[p.status]}</Badge></div>
                 <div className="grid c2">
                   <div className="wf">
-                    <div className="wf-row"><span>Omzet kotor (PoS, lewat gateway)</span><b>{rp(Number(p.gross))}</b></div>
-                    {[["Refund", p.refunds], ["Biaya operasional (+ fee gateway)", p.opex], ["Pajak", p.tax], ["Fee operator", p.operator_fee], ["Cadangan venue", p.reserve], ["Fee platform", p.platform_fee]].map(([l, n]) => <div className="wf-row minus" key={l as string}><span>− {l}</span><span>{rp(Number(n))}</span></div>)}
-                    <div className="wf-row total"><span>D (bisa dibagikan)</span><span>{rp(Number(p.distributable))}</span></div>
-                    <div className="wf-row share"><span>Hak SPV (X = {(s.stake_bps / 100).toFixed(0)}%)</span><span>{rp(Number(p.p_spv))}</span></div>
+                    <div className="wf-row"><span>Gross revenue · PoS gateway</span><b>{rp(Number(p.gross))}</b></div>
+                    {[["Refunds", p.refunds], ["Operating expenses + gateway fees", p.opex], ["Tax", p.tax], ["Operator fee", p.operator_fee], ["Venue reserve", p.reserve], ["Platform fee", p.platform_fee]].map(([l, n]) => <div className="wf-row minus" key={l as string}><span>− {l}</span><span>{rp(Number(n))}</span></div>)}
+                    <div className="wf-row total"><span>D · distributable profit</span><span>{rp(Number(p.distributable))}</span></div>
+                    <div className="wf-row share"><span>SPV share · X = {(s.stake_bps / 100).toFixed(0)}%</span><span>{rp(Number(p.p_spv))}</span></div>
                   </div>
                   <div>
-                    <KV rows={[["Kantong SPV terkumpul", rp(Number(p.pocket_collected))], ["Koreksi", Number(p.true_up) >= 0 ? `kelebihan ${rp(Number(p.true_up))} kembali ke Anda` : `kurang ${rp(-Number(p.true_up))} harus Anda lengkapi`], ["Anda terima dari laba", rp(Number(p.distributable) - Number(p.p_spv) + Number(p.operator_fee))]]} />
+                    <KV rows={[["SPV pocket collected", rp(Number(p.pocket_collected))], ["True-up", Number(p.true_up) >= 0 ? `surplus ${rp(Number(p.true_up))} returned to you` : `shortfall ${rp(-Number(p.true_up))} due from you`], ["Your profit share", rp(Number(p.distributable) - Number(p.p_spv) + Number(p.operator_fee))]]} />
                     {p.status === "awaiting_owner" && att && !signed && <div className="stack" style={{ marginTop: 10 }}>
-                      <p className="small muted">Tanda tangan sebelum {dt(p.owner_deadline)}. Lewat itu, verifier independen boleh menggantikan Anda.</p>
-                      <AttestSignButton attId={att.id} via="privy" chainId={chain.id} label="Setujui angka & tanda tangani" confirmText="Anda menyetujui angka waterfall periode ini?" />
-                      <details><summary className="small" style={{ cursor: "pointer" }}>Angka tidak sesuai? Ajukan sengketa</summary>
-                        <form action={disputeAction} className="stack" style={{ marginTop: 8 }}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="seriesId" value={s.id} /><input type="hidden" name="periodNo" value={p.period_no} /><textarea className="input" name="reason" rows={2} required minLength={10} placeholder="Angka mana yang tidak sesuai dan mengapa" /><button className="btn sm">Ajukan sengketa</button></form></details>
+                      <p className="small muted">Sign by {dt(p.owner_deadline)}. An independent verifier may sign after this deadline.</p>
+                      <AttestSignButton attId={att.id} via="privy" chainId={chain.id} label="Approve figures & sign" confirmText="Do you approve this period’s profit figures?" />
+                      <details><summary className="small" style={{ cursor: "pointer" }}>Figures look wrong? Dispute</summary>
+                        <form action={disputeAction} className="stack" style={{ marginTop: 8 }}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="seriesId" value={s.id} /><input type="hidden" name="periodNo" value={p.period_no} /><textarea className="input" name="reason" rows={2} required minLength={10} placeholder="Which figure is incorrect, and why?" /><button className="btn sm">Submit dispute</button></form></details>
                     </div>}
-                    {p.status === "awaiting_topup" && <div className="stack" style={{ marginTop: 10 }}><Notice tone="warn" title="Lengkapi kekurangan koreksi">Bayar lewat payment gateway{p.topup_url?.startsWith("/sandbox") ? " (sandbox)" : ""}; setelah itu jatah investor dikreditkan. Bila tidak dipenuhi sampai tenggat, seri berstatus Overdue.</Notice><div className="row"><a className="btn primary" href={p.topup_url}>Bayar {rp(-Number(p.true_up))}</a><form action={topupSyncAction}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="seriesId" value={s.id} /><input type="hidden" name="periodNo" value={p.period_no} /><button className="btn">Saya sudah bayar</button></form></div></div>}
-                    {p.posted_tx && <a className="small" href={etherscanTx(p.posted_tx)} target="_blank" rel="noreferrer">tx posting ↗</a>}
+                    {p.status === "awaiting_topup" && <div className="stack" style={{ marginTop: 10 }}><Notice tone="warn" title="True-up payment due">Pay through the payment gateway{p.topup_url?.startsWith("/sandbox") ? " · sandbox" : ""}. Investor balances are credited after settlement. An unpaid shortfall can put the series into Overdue.</Notice><div className="row"><a className="btn primary" href={p.topup_url}>Pay {rp(-Number(p.true_up))}</a><form action={topupSyncAction}><input type="hidden" name="venueId" value={id} /><input type="hidden" name="seriesId" value={s.id} /><input type="hidden" name="periodNo" value={p.period_no} /><button className="btn">I have paid</button></form></div></div>}
+                    {p.posted_tx && <a className="small" href={etherscanTx(p.posted_tx)} target="_blank" rel="noreferrer">View transaction ↗</a>}
                   </div>
                 </div>
               </Card>

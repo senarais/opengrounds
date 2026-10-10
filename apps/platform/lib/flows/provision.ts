@@ -13,7 +13,7 @@ export async function provisionPos(venueId: string): Promise<{ companyId: string
   const { data: venue } = await pf.from("venues").select("*").eq("id", venueId).single();
   if (venue.pos_company_id) return { companyId: venue.pos_company_id, created: false };
   const { data: owner } = await pf.from("users").select("*").eq("id", await ownerOfVenue(venueId)).single();
-  if (!owner?.auth_user_id) throw new Error("Pemohon belum punya akun login; workspace PoS tidak bisa dibuat.");
+  if (!owner?.auth_user_id) throw new Error("The applicant needs a platform login before a PoS workspace can be created.");
   const pos = posDb();
   const { data: company, error } = await pos.from("companies").insert({ slug: slugFor(venue.name, randomBytes(2).toString("hex")), name: venue.name, status: "active", synthetic: false }).select("id").single();
   if (error) throw new Error(`PoS: ${error.message}`);

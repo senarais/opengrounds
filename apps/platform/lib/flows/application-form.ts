@@ -8,9 +8,9 @@ const json = (v: FormDataEntryValue | null) => { try { return JSON.parse(String(
 /** Ubah isian ApplyForm (FormData) menjadi data tervalidasi + berkas. Dipakai pengajuan oleh owner dan oleh Grounds (SPV) atas nama owner. */
 export async function buildApplication(fd: FormData): Promise<{ input: OnboardingInput; files: { kind: DocKindAll; file: File }[] }> {
     const sales = fd.get("sales_data");
-    if (!(sales instanceof File) || sales.size === 0) throw new Error("File data penjualan wajib diunggah");
+    if (!(sales instanceof File) || sales.size === 0) throw new Error("Upload the required sales data file.");
     const parsed = await readSales(sales);
-    if (parsed.errors.length) throw new Error("Data penjualan: " + parsed.errors.join("; "));
+    if (parsed.errors.length) throw new Error("Sales data: " + parsed.errors.join("; "));
     const facilities = json(fd.get("facilities"));
     const input = OnboardingInput.parse({
       company: {

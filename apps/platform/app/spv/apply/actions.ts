@@ -20,14 +20,14 @@ export async function submitForOwner(fd: FormData) {
   try {
     const email = String(fd.get("ownerEmail") ?? "").trim().toLowerCase();
     const { data: owner } = await platformDb().from("users").select("id, role").ilike("email", email).maybeSingle();
-    if (!owner || owner.role !== "owner") throw new Error("Akun owner dengan email itu belum terdaftar. Minta owner mendaftar di /register dulu.");
+    if (!owner || owner.role !== "owner") throw new Error("No owner account exists for this email. Ask the venue owner to register first.");
     const { input, files } = await buildApplication(fd);
     const r = await submitOnboarding(owner.id, input, files, `spv:${me.email}`);
     venueId = r.venueId;
     after(async () => { await runAutomatedCheck(r.caseId).catch((e) => console.error("[kyb]", e?.message ?? e)); });
   } catch (e: any) {
-    if (e?.name === "ZodError") fail(e.issues.slice(0, 3).map((i: any) => `${i.path.join(".")}: ${i.message}`).join(" · "));
+    if (e?.name === "ZodError") fail("Some application details need attention. Review required fields, ownership percentages, and financial data, then try again.");
     return fail(friendlyError(e));
   }
-  redirect(`/spv?ok=${encodeURIComponent("Pengajuan dikirim atas nama owner. Pemeriksaan otomatis berjalan, lalu reviewer meninjau. Owner melihatnya di dashboard-nya.")}`);
+  redirect(`/spv?ok=${encodeURIComponent("Venue application submitted for the owner. Automated checks are running; a reviewer will examine the evidence next.")}`);
 }

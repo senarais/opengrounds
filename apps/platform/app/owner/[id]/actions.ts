@@ -8,14 +8,14 @@ import { platformDb } from "@/lib/db";
 
 async function mine(venueId: string) {
   const me = await requireOwner();
-  if ((await ownerOfVenue(venueId)) !== me.userId) throw new Error("Bukan venue Anda");
+  if ((await ownerOfVenue(venueId)) !== me.userId) throw new Error("This venue does not belong to your account.");
   return me;
 }
 const back = (id: string) => `/owner/${id}`;
 
 export async function resubmitAction(fd: FormData) {
   const id = String(fd.get("venueId"));
-  await guarded(back(id), async () => { const me = await mine(id); const kc = await latestCase(id); await resubmitCase(kc!.id, me.email); return "Dikirim ulang untuk diperiksa."; });
+  await guarded(back(id), async () => { const me = await mine(id); const kc = await latestCase(id); await resubmitCase(kc!.id, me.email); return "Application resubmitted for review."; });
 }
 export async function expenseAction(fd: FormData) {
   const id = String(fd.get("venueId")), seriesId = String(fd.get("seriesId"));
@@ -27,9 +27,9 @@ export async function disputeAction(fd: FormData) {
 }
 export async function topupSyncAction(fd: FormData) {
   const id = String(fd.get("venueId"));
-  await guarded(back(id), async () => { await mine(id); const r = await syncTopup(String(fd.get("seriesId")), Number(fd.get("periodNo"))); return r === "paid" ? "Kekurangan diterima; jatah investor dikreditkan." : `Pembayaran belum diterima (${r}).`; });
+  await guarded(back(id), async () => { await mine(id); const r = await syncTopup(String(fd.get("seriesId")), Number(fd.get("periodNo"))); return r === "paid" ? "Payment received. Investor balances have been credited." : `Payment not received yet (${r}).`; });
 }
 export async function removeExpenseAction(fd: FormData) {
   const id = String(fd.get("venueId"));
-  await guarded(back(id), async () => { await mine(id); await platformDb().from("expense_items").delete().eq("id", String(fd.get("id"))).eq("status", "pending"); return "Biaya dihapus."; });
+  await guarded(back(id), async () => { await mine(id); await platformDb().from("expense_items").delete().eq("id", String(fd.get("id"))).eq("status", "pending"); return "Expense removed."; });
 }

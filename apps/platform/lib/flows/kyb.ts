@@ -9,7 +9,7 @@ import type { Me } from "../auth";
 import { savedReviewQuorum, validateReviewApproval, type ReviewProof } from "./review-signature";
 
 export const KYB_STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Draf", SUBMITTED: "Diajukan", AUTOMATED_CHECK: "Pemeriksaan otomatis", NEEDS_INFO: "Perlu data tambahan", IN_REVIEW: "Ditinjau reviewer", APPROVED: "Disetujui", REJECTED: "Ditolak",
+  DRAFT: "Draft", SUBMITTED: "Submitted", AUTOMATED_CHECK: "Automated check", NEEDS_INFO: "More information needed", IN_REVIEW: "Under review", APPROVED: "Approved", REJECTED: "Declined",
 };
 
 /** Teks per halaman dari PDF; PDF hasil pindai di-OCR. */
@@ -25,7 +25,7 @@ async function pagesOf(path: string, name: string): Promise<string[]> {
   const pdf = /\.pdf$/i.test(name) || /\.pdf$/i.test(path);
   if (!pdf && !isImage(name, "")) return [];
   const { data, error } = await platformDb().storage.from(BUCKET).download(path);
-  if (error || !data) throw new Error(`Gagal mengunduh dokumen: ${error?.message}`);
+  if (error || !data) throw new Error(`Could not download document: ${error?.message}`);
   const bytes = new Uint8Array(await data.arrayBuffer());
   return pdf ? pdfPages(bytes) : [await ocrImage(bytes)];
 }
@@ -37,8 +37,8 @@ async function pagesOf(path: string, name: string): Promise<string[]> {
 export async function runAutomatedCheck(caseId: string, opts: { assetValue?: number } = {}) {
   const pf = platformDb();
   const { data: kc } = await pf.from("kyb_cases").select("*").eq("id", caseId).single();
-  if (!kc) throw new Error("Kasus KYB tidak ditemukan");
-  if (kc.status === "APPROVED" || kc.status === "REJECTED") throw new Error("Kasus sudah diputus");
+  if (!kc) throw new Error("KYB case not found.");
+  if (kc.status === "APPROVED" || kc.status === "REJECTED") throw new Error("This case has already been decided.");
   await pf.from("kyb_cases").update({ status: "AUTOMATED_CHECK", updated_at: new Date().toISOString() }).eq("id", caseId);
   const { input, docs } = await loadOnboarding(kc.venue_id);
 
@@ -88,7 +88,7 @@ export async function runAutomatedCheck(caseId: string, opts: { assetValue?: num
 
 /** Reviewer menandai satu temuan: diterima, dikesampingkan (wajib alasan), minta data, atau tolak. */
 export async function disposeFinding(findingId: string, actor: string, disposition: "accepted" | "overridden" | "request_info" | "rejected", reason: string) {
-  if (disposition === "overridden" && reason.trim().length < 10) throw new Error("Mengesampingkan temuan wajib disertai alasan (minimal 10 karakter)");
+    if (disposition === "overridden" && reason.trim().length < 10) throw new Error("An override requires a reason of at least 10 characters.");
   const pf = platformDb();
   const { data: before } = await pf.from("kyb_findings").select("disposition, disposition_reason").eq("id", findingId).single();
   const { error } = await pf.from("kyb_findings").update({ disposition, disposition_reason: reason || null, disposed_by: actor }).eq("id", findingId);
@@ -103,28 +103,28 @@ export async function disposeFinding(findingId: string, actor: string, dispositi
 export async function decideCase(caseId: string, actor: string, decision: "APPROVED" | "REJECTED" | "NEEDS_INFO", note: string, approval?: { me: Me; assetValue: number; proof: ReviewProof }) {
   const pf = platformDb();
   const { data: kc } = await pf.from("kyb_cases").select("*").eq("id", caseId).single();
-  if (!kc) throw new Error("Kasus tidak ditemukan");
-  if (kc.status !== "IN_REVIEW") throw new Error(`Kasus berstatus ${KYB_STATUS_LABEL[kc.status] ?? kc.status}; jalankan pemeriksaan otomatis dulu`);
-  if (decision !== "APPROVED" && note.trim().length < 10) throw new Error("Tulis alasan untuk owner (minimal 10 karakter)");
-  if (!["APPROVED", "REJECTED", "NEEDS_INFO"].includes(decision)) throw new Error("Keputusan tidak valid");
+  if (!kc) throw new Error("Application not found.");
+  if (kc.status !== "IN_REVIEW") throw new Error(`Application status: ${KYB_STATUS_LABEL[kc.status] ?? kc.status}. Run the automated check first.`);
+  if (decision !== "APPROVED" && note.trim().length < 10) throw new Error("Add a decision note of at least 10 characters for the owner.");
+  if (!["APPROVED", "REJECTED", "NEEDS_INFO"].includes(decision)) throw new Error("Invalid review decision.");
   if (decision === "APPROVED") {
-    if (!approval || approval.me.email !== actor) throw new Error("Persetujuan wajib ditandatangani reviewer di MetaMask");
+    if (!approval || approval.me.email !== actor) throw new Error("Review approval must be signed by the reviewer in MetaMask.");
     const verified = await validateReviewApproval(caseId, approval.me, approval.assetValue, note, approval.proof);
-    if (verified.version !== kc.updated_at) throw new Error("Pengajuan berubah. Muat ulang dan tinjau kembali.");
+    if (verified.version !== kc.updated_at) throw new Error("The application changed. Reload and review it again.");
     // Persist the verified signed statement before changing the decision; fail closed if evidence cannot be stored.
     const { error: proofError } = await pf.from("audit_log").insert({ actor, action: "kyb.review.signed", entity: "kyb_cases", entity_id: caseId, detail: verified.signedReview });
-    if (proofError) throw new Error("Gagal menyimpan bukti tanda tangan; persetujuan belum disimpan");
+    if (proofError) throw new Error("Could not save signature evidence. Approval was not recorded.");
     const { data: fs } = await pf.from("kyb_findings").select("severity, disposition, finding_text").eq("case_id", caseId);
     const open = (fs ?? []).filter((f) => (f.severity === "critical" || f.severity === "high") && !f.disposition);
-    if (open.length) throw new Error(`Masih ada ${open.length} temuan high/critical yang belum ditinjau`);
+    if (open.length) throw new Error(`${open.length} critical/high findings still need review.`);
     const rejected = (fs ?? []).filter((f) => f.disposition === "rejected");
-    if (rejected.length) throw new Error("Ada temuan yang Anda tandai 'tolak'; kasus tidak bisa disetujui");
-    if (!kc.gate_result?.valuation) throw new Error("Valuasi belum bisa dihitung (D12 tidak positif)");
+    if (rejected.length) throw new Error("A finding is marked as a reason to decline. This case cannot be approved.");
+    if (!kc.gate_result?.valuation) throw new Error("Valuation is unavailable because D12 is not positive.");
     const quorum = await savedReviewQuorum(caseId, verified.signedReview.typed.message.evidenceHash, approval.assetValue);
     if (!quorum.ready) return { venueId: kc.venue_id as string, finalized: false, waitingFor: quorum.operator ? "reviewer independen" : "operator" };
   }
   const { data: changed, error: decisionError } = await pf.from("kyb_cases").update({ status: decision, decided_by: actor, decision_note: note || null, decided_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", caseId).eq("status", "IN_REVIEW").eq("updated_at", kc.updated_at).select("id").maybeSingle();
-  if (decisionError || !changed) throw new Error("Keputusan belum tersimpan atau pengajuan sudah berubah. Muat ulang halaman.");
+  if (decisionError || !changed) throw new Error("Decision was not saved or the application changed. Reload and try again.");
   await audit(actor, "kyb.decide", { entity: "kyb_cases", entityId: caseId, before: { status: kc.status }, after: { status: decision, note } });
   return { venueId: kc.venue_id as string, finalized: true, waitingFor: null };
 }
@@ -133,7 +133,7 @@ export async function decideCase(caseId: string, actor: string, decision: "APPRO
 export async function resubmitCase(caseId: string, actor: string) {
   const pf = platformDb();
   const { data: kc } = await pf.from("kyb_cases").select("status").eq("id", caseId).single();
-  if (kc?.status !== "NEEDS_INFO") throw new Error("Kasus tidak sedang menunggu data tambahan");
+  if (kc?.status !== "NEEDS_INFO") throw new Error("This case is not waiting for additional information.");
   await pf.from("kyb_cases").update({ status: "SUBMITTED", updated_at: new Date().toISOString() }).eq("id", caseId);
   await audit(actor, "kyb.resubmit", { entity: "kyb_cases", entityId: caseId });
 }

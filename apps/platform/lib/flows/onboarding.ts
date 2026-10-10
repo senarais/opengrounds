@@ -81,7 +81,7 @@ async function must(p: PromiseLike<{ error: { message: string } | null }>) {
 export async function loadOnboarding(venueId: string): Promise<{ input: OnboardingInput; venue: any; org: any; land: any; docs: any[] }> {
   const pf = platformDb();
   const { data: venue } = await pf.from("venues").select("*").eq("id", venueId).single();
-  if (!venue) throw new Error("Venue tidak ditemukan");
+  if (!venue) throw new Error("Venue not found.");
   const [{ data: org }, { data: bos }, { data: land }, { data: fin }, { data: bank }, { data: docs }] = await Promise.all([
     pf.from("organizations").select("*").eq("id", venue.organization_id).single(),
     pf.from("beneficial_owners").select("*").eq("organization_id", venue.organization_id),

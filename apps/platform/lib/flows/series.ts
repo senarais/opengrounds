@@ -22,16 +22,16 @@ const ACQUISITION_WINDOW_DAYS = 7;
 export async function issueSeries(venueId: string, actor: string, assetValue: number) {
   const pf = platformDb();
   const { data: existing } = await pf.from("series").select("id").eq("venue_id", venueId).not("status", "eq", "Closed").limit(1);
-  if (existing?.length) throw new Error("Venue ini sudah punya seri");
+  if (existing?.length) throw new Error("This venue already has a series.");
   const { data: kc } = await pf.from("kyb_cases").select("*").eq("venue_id", venueId).order("created_at", { ascending: false }).limit(1).single();
-  if (kc?.status !== "APPROVED") throw new Error("KYB belum disetujui");
+  if (kc?.status !== "APPROVED") throw new Error("KYB has not been approved.");
   const ownerId = await ownerOfVenue(venueId);
   const { data: owner } = await pf.from("users").select("wallet, display_name").eq("id", ownerId).single();
-  if (!owner?.wallet) throw new Error("Owner belum punya wallet. Minta owner membuka dashboard sekali supaya wallet Privy-nya dibuat.");
+  if (!owner?.wallet) throw new Error("The owner’s wallet is not ready. Ask them to open the owner portal once to create their Privy wallet.");
 
   const { input, venue, docs } = await loadOnboarding(venueId);
   const gate = kybGate(input, docs.map((d) => d.kind), { assetValue });
-  if (!gate.valuation) throw new Error("Valuasi tidak bisa dihitung");
+  if (!gate.valuation) throw new Error("Valuation could not be calculated.");
   const val = gate.valuation;
   const p = { ...DEMO_PARAMS, tokenPrice: input.offering.tokenPrice ?? DEMO_PARAMS.tokenPrice };
 
@@ -82,21 +82,21 @@ export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const s = ctx.series;
-  if (s.status !== "Verified") throw new Error("Akuisisi hanya disiapkan untuk seri yang sudah diverifikasi");
+  if (s.status !== "Verified") throw new Error("Acquisition can only be prepared for a verified series.");
   const pf = platformDb();
   const review = await pf.from("kyb_cases").select("status").eq("venue_id", s.venue_id).order("created_at", { ascending: false }).limit(1).single();
-  if (review.error || review.data?.status !== "APPROVED") throw new Error("Review belum disetujui; tanda tangan akuisisi belum bisa disiapkan");
+  if (review.error || review.data?.status !== "APPROVED") throw new Error("Review is not approved. The acquisition signature is not ready.");
   const evidenceHash = evidenceHashOf(canonicalJson({ profile: profileHash ?? ctx.venue.public_profile_hash, valuation: s.valuation_id, simulated: true }));
   const payload = { valuation: String(s.valuation_idr), supply: String(s.supply), refPrice: String(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash };
   const payloadHash = acquisitionPayload({ valuation: BigInt(s.valuation_idr), supply: BigInt(s.supply), refPrice: BigInt(s.ref_price), stakeBps: s.stake_bps, spvFeeBps: s.spv_fee_bps, evidenceHash });
   const { data: existing, error: existingError } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("ref_id", "0").maybeSingle();
   if (existingError) throw new Error(existingError.message);
-  if (existing?.status === "submitted") throw new Error("Akuisisi sudah dikirim ke chain");
+  if (existing?.status === "submitted") throw new Error("Acquisition has already been submitted on-chain.");
   // Keep compatibility with the existing schema; these fields now record submission intent, not an extra approval step.
   if (!s.spv_approved_at) {
     const submitter = ctx.venue.submitted_by ?? "legacy-submission";
     const recordedAt = ctx.venue.created_at ?? new Date().toISOString();
-    const { error } = await pf.from("series").update({ spv_approved_by: submitter, spv_approved_at: recordedAt, spv_note: "Persetujuan aplikasi tercakup dalam pengajuan; pengalihan hak dan pembayaran tetap dikonfirmasi owner." }).eq("id", seriesId).is("spv_approved_at", null);
+    const { error } = await pf.from("series").update({ spv_approved_by: submitter, spv_approved_at: recordedAt, spv_note: "Purchase approval is included in the SPV application; the owner still confirms rights transfer and payment." }).eq("id", seriesId).is("spv_approved_at", null);
     if (error) throw new Error(error.message);
     await audit("platform", "acquisition.submission_recognized", { entity: "series", entityId: seriesId, detail: { submittedBy: submitter, submittedAt: recordedAt, simulated: true } });
   }
@@ -110,14 +110,14 @@ export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
 }
 
 /**
- * Owner menandatangani ACQUISITION_CLOSED dengan wallet Privy-nya: "hak ekonomi X% dialihkan dan dana akuisisi diterima (simulasi)".
- * Begitu dua tanda tangan lengkap, `activate` dikirim: kontrak memeriksa ulang tanda tangan dan mencetak supply sekali ke treasury.
+ * Owner signs ACQUISITION_CLOSED with their Privy wallet: rights transfer and simulated acquisition payment receipt.
+ * Once both signatures are complete, `activate` verifies them and mints the fixed supply to treasury.
  */
 export async function ownerSignAcquisition(seriesId: string, attId: string, signature: Hex) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const { att } = await addSignature(attId, addr, signature, { expectSlot: "COUNTERPARTY" });
-  if (!isReady(att)) return "Tanda tangan tersimpan; menunggu tanda tangan platform.";
+  if (!isReady(att)) return "Signature saved. Waiting for the platform signature.";
   return activateIfReady(seriesId);
 }
 
@@ -126,7 +126,7 @@ export async function activateIfReady(seriesId: string) {
   const addr = needContract(ctx);
   const pf = platformDb();
   const { data: att } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("status", "collecting").maybeSingle();
-  if (!att || !isReady(att)) throw new Error("Attestation akuisisi belum lengkap");
+  if (!att || !isReady(att)) throw new Error("Acquisition attestation is incomplete.");
   const s = ctx.series;
   const deadline = BigInt(Math.floor(Date.parse(att.deadline) / 1000));
   const tx = await operatorSend(addr, venueSeriesAbi as any, "activate", [BigInt(s.valuation_idr), BigInt(s.supply), BigInt(s.ref_price), att.evidence_hash, deadline, sigsOf(att)]);
@@ -135,7 +135,7 @@ export async function activateIfReady(seriesId: string) {
   // pembayaran akuisisi ke owner = S = V × X, dari modal SPV (simulasi, §2.4)
   await moveCash(seriesId, `acquisition-${seriesId}`, [["owner", Math.floor((Number(s.valuation_idr) * s.stake_bps) / 10_000)]]);
   await audit("platform", "series.activate", { entity: "series", entityId: seriesId, after: { tx, supply: s.supply, refPrice: s.ref_price } });
-  return `Seri aktif. ${Number(s.supply).toLocaleString("id-ID")} token dicetak sekali ke treasury Grounds.`;
+  return `Series active. ${Number(s.supply).toLocaleString("en-US")} tokens minted once to the Grounds treasury.`;
 }
 
 /** Sinkronkan status seri dari chain (Overdue/Defaulted/Disputed bisa dipicu dari luar platform). */

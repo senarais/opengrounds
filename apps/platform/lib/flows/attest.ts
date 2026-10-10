@@ -17,7 +17,7 @@ export function allowedSlots(kind: AttKind, ownerSilent = false): SlotName[] {
   if (kind === "REVENUE_PERIOD") return ownerSilent ? ["PLATFORM", "COUNTERPARTY", "VERIFIER"] : ["PLATFORM", "COUNTERPARTY"];
   return ["PLATFORM", "VERIFIER"];
 }
-export const SLOT_LABEL: Record<SlotName, string> = { PLATFORM: "Grounds (SPV) via Open Grounds", COUNTERPARTY: "Owner venue (penjual)", VERIFIER: "Reviewer independen (verifier)" };
+export const SLOT_LABEL: Record<SlotName, string> = { PLATFORM: "Grounds · platform", COUNTERPARTY: "Venue owner · seller", VERIFIER: "Independent reviewer · verifier" };
 
 export interface Sig { slot: SlotName; signer: Address; sig: Hex; at: string }
 
@@ -45,15 +45,15 @@ export const walletJsonOf = (att: any, series: Address) => {
 export async function addSignature(attId: string, series: Address, signature: Hex, opts: { ownerSilent?: boolean; expectSlot?: SlotName } = {}) {
   const pf = platformDb();
   const { data: att } = await pf.from("attestations").select("*").eq("id", attId).single();
-  if (!att) throw new Error("Attestation tidak ditemukan");
-  if (att.status !== "collecting") throw new Error("Attestation ini sudah tidak menerima tanda tangan");
-  if (Date.parse(att.deadline) < Date.now()) throw new Error("Attestation sudah kedaluwarsa; buat ulang");
+  if (!att) throw new Error("Attestation not found.");
+  if (att.status !== "collecting") throw new Error("This attestation is no longer collecting signatures.");
+  if (Date.parse(att.deadline) < Date.now()) throw new Error("Attestation expired. Create a new one.");
   const signer = await recoverTypedDataAddress({ ...typedDataOf(att, series), signature } as any);
   const reg = await registrySigners(series);
   const slot: SlotName | null = signer === reg.platform ? "PLATFORM" : signer === reg.verifier ? "VERIFIER" : reg.counterparty && signer === reg.counterparty ? "COUNTERPARTY" : null;
-  if (!slot) throw new Error(`Wallet ${signer.slice(0, 10)}… bukan penanda tangan terdaftar untuk seri ini`);
-  if (opts.expectSlot && slot !== opts.expectSlot) throw new Error(`Tanda tangan ini dari slot ${SLOT_LABEL[slot]}, bukan ${SLOT_LABEL[opts.expectSlot]}`);
-  if (!allowedSlots(att.kind, opts.ownerSilent).includes(slot)) throw new Error(`${SLOT_LABEL[slot]} tidak berhak menandatangani ${att.kind}`);
+  if (!slot) throw new Error(`Wallet ${signer.slice(0, 10)}… is not a registered signer for this series.`);
+  if (opts.expectSlot && slot !== opts.expectSlot) throw new Error(`This signature is from ${SLOT_LABEL[slot]}, not ${SLOT_LABEL[opts.expectSlot]}.`);
+  if (!allowedSlots(att.kind, opts.ownerSilent).includes(slot)) throw new Error(`${SLOT_LABEL[slot]} cannot sign ${att.kind}.`);
   const sigs: Sig[] = att.signatures ?? [];
   if (sigs.some((s) => s.slot === slot)) return { att, slot, added: false };
   const next = [...sigs, { slot, signer, sig: signature, at: new Date().toISOString() }];

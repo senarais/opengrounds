@@ -6,7 +6,7 @@ import { friendlyError } from "./operator";
 
 export type Account = "escrow" | "spv_pocket" | "spv_capital" | "owner" | "venue_reserve" | "buyback_reserve" | "distribution" | "spv_ops" | "platform_ops";
 
-/** Jejak audit append-only: siapa, apa, sebelum/sesudah. */
+/** Append-only audit trail. */
 export async function audit(actor: string, action: string, a: { entity?: string; entityId?: string; before?: unknown; after?: unknown; detail?: unknown } = {}) {
   await platformDb().from("audit_log").insert({ actor, action, entity: a.entity ?? null, entity_id: a.entityId ?? null, before: a.before ?? null, after: a.after ?? null, detail: a.detail ?? null });
 }
@@ -34,14 +34,14 @@ export async function cashBalance(seriesId: string, account: Account): Promise<n
 export async function getSeries(id: string) {
   const pf = platformDb();
   const { data: series } = await pf.from("series").select("*").eq("id", id).maybeSingle();
-  if (!series) throw new Error("Seri tidak ditemukan");
+  if (!series) throw new Error("Series not found.");
   const { data: venue } = await pf.from("venues").select("*").eq("id", series.venue_id).single();
   return { series, venue, address: series.contract_address as Address | null };
 }
 export type SeriesCtx = Awaited<ReturnType<typeof getSeries>>;
 
 export function needContract(ctx: SeriesCtx): Address {
-  if (!ctx.address) throw new Error("Kontrak seri belum dideploy");
+  if (!ctx.address) throw new Error("Series contract is not deployed yet.");
   return ctx.address;
 }
 

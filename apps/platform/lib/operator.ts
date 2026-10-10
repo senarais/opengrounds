@@ -7,13 +7,13 @@ const EXTRA_ERRORS = [...attestationRegistryAbi, ...seriesTokenAbi, ...venueSeri
 const withErrors = (abi: Abi): Abi => [...abi, ...EXTRA_ERRORS.filter((e: any) => !(abi as any[]).some((a) => a.type === "error" && a.name === e.name))];
 
 /**
- * SERVER ONLY. Kunci backend Open Grounds (hot wallet testnet; production: KMS/HSM [Roadmap]):
+ * SERVER ONLY. Open Grounds backend testnet keys (KMS/HSM is a production roadmap item):
  *  - CONTROLLER + ADMIN seri: mengeksekusi alokasi/jual balik/periode yang sudah ditandatangani pihak lain, membayar gas
  *  - ATTESTOR_PLATFORM: satu dari tiga slot attestation (tidak pernah cukup sendirian)
  */
 const key = (name: string, fallback?: string) => {
   const k = process.env[name] || (fallback ? process.env[fallback] : undefined);
-  if (!k) throw new Error(`${name} belum ada di .env. Jalankan scripts/setup-operator.sh`);
+  if (!k) throw new Error(`${name} is missing from .env. Run scripts/setup-operator.sh.`);
   return privateKeyToAccount((k.startsWith("0x") ? k : `0x${k}`) as Hex);
 };
 const controller = () => key("OPERATOR_PRIVATE_KEY");
@@ -31,11 +31,11 @@ export async function operatorSend(address: Address, abi: Abi, functionName: str
   const { request } = await publicClient.simulateContract({ account: acct, address, abi: withErrors(abi), functionName, args } as any);
   const hash = await wallet.writeContract(request as any);
   const rc = await publicClient.waitForTransactionReceipt({ hash });
-  if (rc.status !== "success") throw new Error(`Transaksi gagal on-chain: ${hash}`);
+  if (rc.status !== "success") throw new Error(`On-chain transaction failed: ${hash}`);
   return hash;
 }
 
-/** Simulasikan panggilan tanpa mengirim (dipakai demo "platform curang ditolak"): kembalikan nama error kontrak bila ditolak. */
+/** Simulate a contract call without broadcasting it; return the contract error when rejected. */
 export async function operatorTry(address: Address, abi: Abi, functionName: string, args: unknown[] = []): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await publicClient.simulateContract({ account: controller(), address, abi: withErrors(abi), functionName, args } as any);
@@ -54,7 +54,7 @@ export async function operatorDeploy(abi: Abi, bytecode: Hex, args: unknown[]): 
   const gas = await publicClient.estimateGas({ account, data });
   const hash = await wallet.sendTransaction({ account, chain, data, gas: (gas * 13n) / 10n });
   const rc = await publicClient.waitForTransactionReceipt({ hash });
-  if (rc.status !== "success" || !rc.contractAddress) throw new Error(`Deploy gagal on-chain: ${hash}`);
+  if (rc.status !== "success" || !rc.contractAddress) throw new Error(`On-chain deployment failed: ${hash}`);
   return { address: rc.contractAddress, tx: hash };
 }
 
@@ -63,48 +63,48 @@ export async function platformSignTyped(args: { domain: any; types: any; primary
   return platformSigner().signTypedData(args);
 }
 
-/** Terjemahan error kontrak yang muncul di alur pengguna. */
+/** Contract errors shown in user-facing flows. */
 const ERR_ID: Record<string, string> = {
-  WrongState: "status seri tidak sesuai untuk aksi ini",
-  BadParams: "parameter tidak valid",
-  BadPrice: "nominal tidak sama dengan jumlah token × harga referensi",
-  BadPeriod: "nomor atau tanggal periode tidak berurutan",
-  DeductionsExceedGross: "total potongan melebihi omzet kotor",
-  OpexAboveCap: "biaya operasional melebihi plafon seri",
-  ItemDisputed: "item ini sedang disengketakan",
-  OrderUsed: "pesanan/permintaan ini sudah pernah dieksekusi",
-  LengthMismatch: "jumlah pesanan dan tanda tangan tidak sama",
-  BadInvestorSignature: "tanda tangan investor tidak valid untuk pesanan ini",
-  OrderExpired: "pesanan sudah kedaluwarsa",
-  NotVerified: "wallet belum terverifikasi (KYC/allowlist)",
-  IsFrozen: "wallet sedang dibekukan",
-  InsufficientTreasury: "token di treasury tidak cukup",
-  HoldingCapExceeded: "melebihi batas kepemilikan per investor",
-  ExceedsOwed: "pembayaran melebihi kewajiban periode",
-  NotOverdueYet: "tenggat belum lewat",
-  NothingOwed: "tidak ada kewajiban yang tertunggak",
-  NotAttestor: "bukan penanda tangan terdaftar",
-  NotDisputed: "item ini tidak sedang disengketakan",
-  AlreadyDisputed: "item ini sudah disengketakan",
-  UnsettledPeriods: "masih ada periode yang belum dilunasi",
-  LockedTokens: "token masih dalam masa kunci",
-  TransfersRestricted: "token tidak bisa dipindahkan langsung (hanya lewat kontrak seri)",
-  NotRegisteredSeries: "seri belum terdaftar di registry",
-  Expired: "attestation sudah kedaluwarsa",
-  AlreadyUsed: "attestation ini sudah dipakai",
-  UnknownSigner: "penanda tangan tidak dikenal registry",
-  SlotNotAllowed: "penanda tangan ini tidak berhak untuk jenis attestation ini",
-  DuplicateSlot: "dua tanda tangan dari slot yang sama",
-  NotEnoughSignatures: "tanda tangan kurang dari 2",
-  PlatformRequired: "tanda tangan platform wajib ada",
-  AccessControlUnauthorizedAccount: "wallet ini tidak punya peran untuk aksi ini",
-  ECDSAInvalidSignature: "tanda tangan tidak valid",
+  WrongState: "The series is not in a state that allows this action.",
+  BadParams: "One or more parameters are invalid.",
+  BadPrice: "The payment does not equal token quantity × reference price.",
+  BadPeriod: "The period number or date is out of sequence.",
+  DeductionsExceedGross: "Total deductions exceed gross revenue.",
+  OpexAboveCap: "Operating expenses exceed the series limit.",
+  ItemDisputed: "This item is disputed.",
+  OrderUsed: "This order or request has already been executed.",
+  LengthMismatch: "The order and signature counts do not match.",
+  BadInvestorSignature: "The investor signature is invalid for this order.",
+  OrderExpired: "This order has expired.",
+  NotVerified: "This wallet is not verified or allowlisted.",
+  IsFrozen: "This wallet is frozen.",
+  InsufficientTreasury: "The treasury does not hold enough tokens.",
+  HoldingCapExceeded: "This exceeds the investor holding limit.",
+  ExceedsOwed: "Payment exceeds the period obligation.",
+  NotOverdueYet: "The deadline has not passed.",
+  NothingOwed: "No outstanding obligation is due.",
+  NotAttestor: "This wallet is not a registered signer.",
+  NotDisputed: "This item is not disputed.",
+  AlreadyDisputed: "This item is already disputed.",
+  UnsettledPeriods: "Some periods remain unsettled.",
+  LockedTokens: "These tokens are still locked.",
+  TransfersRestricted: "Tokens cannot be transferred directly; use the series contract.",
+  NotRegisteredSeries: "This series is not registered.",
+  Expired: "This attestation has expired.",
+  AlreadyUsed: "This attestation has already been used.",
+  UnknownSigner: "This wallet is not recognized by the registry.",
+  SlotNotAllowed: "This signer is not allowed for this attestation type.",
+  DuplicateSlot: "Two signatures came from the same signer slot.",
+  NotEnoughSignatures: "At least two signatures are required.",
+  PlatformRequired: "A platform signature is required.",
+  AccessControlUnauthorizedAccount: "This wallet does not have permission for this action.",
+  ECDSAInvalidSignature: "The signature is invalid.",
 };
 
 export function friendlyError(e: any): string {
   const m: string = e?.shortMessage ?? e?.message ?? String(e);
   const name: string | undefined = e?.cause?.data?.errorName ?? e?.data?.errorName ?? e?.cause?.cause?.data?.errorName ?? m.match(/reverted with the following reason:\s*(.+)/)?.[1] ?? m.match(/\b(?:Error|error):?\s+([A-Z][A-Za-z]+)\(/)?.[1];
-  if (name) return `Kontrak menolak: ${ERR_ID[name] ?? name}`;
+  if (name) return `Contract rejected the action: ${ERR_ID[name] ?? name}`;
   return m.split("\n")[0]!;
 }
 export const errorName = (e: any): string | undefined => e?.cause?.data?.errorName ?? e?.data?.errorName ?? e?.cause?.cause?.data?.errorName;

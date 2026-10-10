@@ -21,7 +21,7 @@ function deployment(): Deployment {
   const path = join(process.cwd(), "../../packages/contracts/deployments/latest.json");
   const mtime = statSync(path).mtimeMs;
   if (!fileCache || fileCache.mtime !== mtime) fileCache = { mtime, v: JSON.parse(readFileSync(path, "utf8")) };
-  if (!fileCache.v.AttestationRegistry) throw new Error("Registry attestation belum dideploy (jalankan ./scripts/deploy.sh)");
+  if (!fileCache.v.AttestationRegistry) throw new Error("Attestation registry is not deployed. Run ./scripts/deploy.sh.");
   return fileCache.v;
 }
 

@@ -23,7 +23,7 @@ export const isStaff = (m: Me | null) => !!m && (m.role === "operator" || m.role
 export async function requireOwner(next = "/owner"): Promise<Me> {
   const me = await getMe();
   if (!me) redirect(`/login?next=${encodeURIComponent(next)}`);
-  if (me.role !== "owner") redirect("/?err=" + encodeURIComponent("Halaman ini untuk owner venue"));
+  if (me.role !== "owner") redirect("/?err=" + encodeURIComponent("This page is for venue owners."));
   return me;
 }
 
@@ -31,7 +31,7 @@ export async function requireOwner(next = "/owner"): Promise<Me> {
 export async function requireInvestor(next = "/portfolio"): Promise<Me> {
   const me = await getMe();
   if (!me) redirect(`/login?next=${encodeURIComponent(next)}`);
-  if (me.role !== "investor") redirect("/?err=" + encodeURIComponent("Halaman ini untuk investor"));
+  if (me.role !== "investor") redirect("/?err=" + encodeURIComponent("This page is for investors."));
   return me;
 }
 
@@ -39,7 +39,7 @@ export async function requireInvestor(next = "/portfolio"): Promise<Me> {
 export async function requireArea(area: StaffArea): Promise<Me> {
   const me = await getMe();
   if (!me) redirect(`/login?next=${encodeURIComponent(`/${area}`)}`);
-  if (!canOpen(me, area)) redirect("/?err=" + encodeURIComponent("Menu ini tidak tersedia untuk peran Anda"));
+  if (!canOpen(me, area)) redirect("/?err=" + encodeURIComponent("This area is not available to your account."));
   return me;
 }
 
@@ -47,6 +47,6 @@ export async function requireArea(area: StaffArea): Promise<Me> {
 export async function requireStaff(next = "/operator"): Promise<Me> {
   const me = await getMe();
   if (!me) redirect(`/login?next=${encodeURIComponent(next)}`);
-  if (!isStaff(me)) redirect("/?err=" + encodeURIComponent("Halaman ini untuk staf platform"));
+  if (!isStaff(me)) redirect("/?err=" + encodeURIComponent("This page is for platform staff."));
   return me;
 }

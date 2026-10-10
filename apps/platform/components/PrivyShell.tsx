@@ -5,15 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sepolia } from "viem/chains";
 import { SignerCtx, type InvestorSigner, type SignerState } from "./signer-context";
 
-const linkMessage = (authId: string) => `Hubungkan wallet ke OpenGrounds\nAkun: ${authId}\nWaktu: ${new Date().toISOString()}`;
+const linkMessage = (authId: string) => `Link your wallet to Open Grounds\nAccount: ${authId}\nTime: ${new Date().toISOString()}`;
 
 /**
- * Wallet investor dan owner dibuat otomatis oleh Privy (custom auth: login Supabase kita ditukar jadi wallet milik pengguna itu).
- * Kunci disimpan Privy, bukan platform. Alamatnya dibuktikan ke server dengan menandatangani pesan yang sama seperti penautan MetaMask,
- * jadi server tidak perlu memercayai klien. Tanpa NEXT_PUBLIC_PRIVY_APP_ID komponen ini tidak melakukan apa-apa.
+ * Privy creates embedded owner/investor wallets. Their private keys stay with Privy, not Open Grounds.
  */
 export function PrivyShell({ appId, enabled, authId, linked, chainId, children }: { appId?: string; enabled: boolean; authId?: string; linked: boolean; chainId: number; children: React.ReactNode }) {
-  // "Coba lagi" me-mount ulang Bridge, sehingga sinkronisasi login ke Privy diulang dari awal
+  // Retry remounts the bridge and restarts Privy session synchronization.
   const [round, setRound] = useState(0);
   if (!appId || !enabled || !authId) return <>{children}</>;
   return (
@@ -26,7 +24,7 @@ export function PrivyShell({ appId, enabled, authId, linked, chainId, children }
   );
 }
 
-/** Ambil token sesi dari server; coba ulang saat jaringan ke Supabase putus sesaat. Tidak pernah melempar (syarat Privy). */
+/** Fetch the session token from Supabase. Retry transient network failures without throwing into Privy. */
 async function fetchJwt(): Promise<string | undefined> {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
@@ -34,14 +32,14 @@ async function fetchJwt(): Promise<string | undefined> {
       if (r.status === 401) return undefined;
       const j = (await r.json()) as { token?: string | null };
       if (r.ok && j.token) return j.token;
-    } catch { /* jaringan: coba lagi */ }
+    } catch { /* retry transient network errors */ }
     await new Promise((res) => setTimeout(res, 800 * 2 ** attempt));
   }
   return undefined;
 }
 
 const friendly = (m?: string) =>
-  m && /authenticated|jwt|token|login/i.test(m) ? "Login ke Privy belum tersambung, biasanya karena koneksi ke server sempat putus. Klik Coba lagi." : m;
+  m && /authenticated|jwt|token|login/i.test(m) ? "Privy could not connect your session. This is usually temporary; try again." : m;
 
 function Bridge({ authId, linked, onRestart, children }: { authId: string; linked: boolean; onRestart: () => void; children: React.ReactNode }) {
   const router = useRouter();
@@ -63,7 +61,7 @@ function Bridge({ authId, linked, onRestart, children }: { authId: string; linke
     signTypedData: async (typedJson) => (await signTypedData(JSON.parse(typedJson), { address: embedded.address })).signature,
   }) : null, [embedded?.address, signMessage, signTypedData]);
 
-  // wallet sudah ada tetapi server belum tahu: buktikan kepemilikan sekali, lalu muat ulang
+  // Link an existing embedded wallet to the server once, then refresh the session.
   useEffect(() => {
     if (linked || !signer || !walletsReady || tried.current === attempt) return;
     tried.current = attempt;
@@ -74,7 +72,7 @@ function Bridge({ authId, linked, onRestart, children }: { authId: string; linke
         const signature = await signer.signMessage(message);
         const res = await fetch("/api/wallet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: signer.address, message, signature }) });
         const j = await res.json();
-        if (!res.ok) throw new Error(j.error ?? "gagal menautkan wallet");
+        if (!res.ok) throw new Error(j.error ?? "Could not link wallet.");
         setPhase("done");
         router.refresh();
       } catch (e: any) { setError(e?.message ?? String(e)); setPhase("error"); }
@@ -85,8 +83,8 @@ function Bridge({ authId, linked, onRestart, children }: { authId: string; linke
     enabled: true,
     signer,
     status: phase === "error" || state.status === "error" ? "error" : phase === "linking" ? "linking" : signer ? "ready" : "loading",
-    error: friendly(error) ?? (state.status === "error" ? "Login ke Privy gagal. Bila berulang, periksa pengaturan JWT-based auth di dashboard Privy." : undefined),
-    // gagal di tahap login Privy: ulang sinkronisasi dari awal; gagal di tahap penautan: cukup ulang penautan
+    error: friendly(error) ?? (state.status === "error" ? "Privy sign-in failed. Check JWT-based authentication in the Privy dashboard." : undefined),
+    // Retry full session synchronization for Privy errors; retry wallet linking for signature errors.
     retry: () => { if (state.status === "error" || !signer) { onRestart(); return; } setPhase("idle"); setError(undefined); setAttempt((n) => n + 1); },
   };
   return <SignerCtx.Provider value={value}>{children}</SignerCtx.Provider>;
