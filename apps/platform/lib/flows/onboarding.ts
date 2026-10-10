@@ -7,9 +7,9 @@ import { uploadDocument } from "../storage";
 export const DOC_KINDS = ["deed", "nib", "npwp", "land_certificate", "permit", "bank_statement", "financial_report", "sales_data", "tax", "debt", "insurance", "photo", "other"] as const;
 export type DocKindAll = (typeof DOC_KINDS)[number];
 export const DOC_LABEL: Record<DocKindAll, string> = {
-  deed: "Akta pendirian/perubahan", nib: "NIB", npwp: "NPWP badan usaha", land_certificate: "Sertifikat tanah", permit: "Izin bangunan (PBG/SLF)",
-  bank_statement: "Rekening koran", financial_report: "Laporan keuangan", sales_data: "Data penjualan (CSV/XLSX)", tax: "Bukti pajak", debt: "Perjanjian utang",
-  insurance: "Polis asuransi", photo: "Foto venue", other: "Lainnya",
+  deed: "Company deed or amendment", nib: "Business ID · NIB", npwp: "Company tax ID · NPWP", land_certificate: "Land certificate", permit: "Building permit · PBG / SLF",
+  bank_statement: "Bank statement", financial_report: "Financial report", sales_data: "Sales data · CSV / XLSX", tax: "Tax document", debt: "Loan agreement",
+  insurance: "Insurance policy", photo: "Venue photo", other: "Other",
 };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");

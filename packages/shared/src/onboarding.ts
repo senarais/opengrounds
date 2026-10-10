@@ -16,22 +16,22 @@ export const SPORT_OPTIONS = ["futsal", "basket", "badminton", "padel", "tenis",
 export const SURFACE_OPTIONS = ["rumput sintetis", "vinyl", "parket kayu", "semen/beton", "karpet", "tanah liat", "lainnya"] as const;
 export const LAND_RIGHTS = ["SHM", "HGB", "HGU", "HP"] as const;
 export const LAND_RIGHT_LABEL: Record<(typeof LAND_RIGHTS)[number], string> = {
-  SHM: "Sertifikat Hak Milik", HGB: "Hak Guna Bangunan", HGU: "Hak Guna Usaha", HP: "Hak Pakai",
+  SHM: "Freehold title · SHM", HGB: "Building-use title · HGB", HGU: "Cultivation title · HGU", HP: "Right-to-use title · HP",
 };
 
-const yyyymm = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Format bulan: YYYY-MM");
+const yyyymm = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM month format.");
 const rupiah = z.number().int().min(0);
-const person = z.object({ name: z.string().trim().min(3, "Nama minimal 3 karakter").max(100), title: z.string().trim().min(2).max(60) });
+const person = z.object({ name: z.string().trim().min(3, "Name must be at least 3 characters.").max(100), title: z.string().trim().min(2).max(60) });
 
 /** Satu lapangan/fasilitas yang disewakan. Menjadi produk awal di PoS setelah KYB disetujui. */
 export const Facility = z.object({
-  name: z.string().trim().min(2, "Nama lapangan minimal 2 karakter").max(40),
+  name: z.string().trim().min(2, "Facility name must be at least 2 characters.").max(40),
   sport: z.enum(SPORT_OPTIONS),
-  lengthM: z.number().min(3, "Panjang minimal 3 m").max(200),
-  widthM: z.number().min(3, "Lebar minimal 3 m").max(200),
+  lengthM: z.number().min(3, "Length must be at least 3 m.").max(200),
+  widthM: z.number().min(3, "Width must be at least 3 m.").max(200),
   surface: z.enum(SURFACE_OPTIONS),
   indoor: z.boolean(),
-  pricePerHour: z.number().int().min(10_000, "Tarif per jam minimal Rp10.000").max(50_000_000),
+  pricePerHour: z.number().int().min(10_000, "Hourly rate must be at least Rp10,000.").max(50_000_000),
 });
 export type Facility = z.infer<typeof Facility>;
 
@@ -59,41 +59,41 @@ export const toWaterfall = (m: FinancialMonth): Waterfall => ({
 export const OnboardingInput = z
   .object({
     company: z.object({
-      legalName: z.string().trim().min(3, "Nama legal minimal 3 karakter").max(100),
-      nib: z.string().trim().regex(/^\d{13}$/, "NIB harus 13 digit"),
-      npwp: z.string().trim().regex(/^(\d{15}|\d{16})$/, "NPWP harus 15 atau 16 digit (tanpa titik/strip)"),
-      deedNumber: z.string().trim().min(1, "Nomor akta wajib diisi").max(40),
-      deedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal akta: YYYY-MM-DD"),
-      registeredAddress: z.string().trim().min(10, "Alamat terdaftar minimal 10 karakter").max(250),
-      kbli: z.string().trim().regex(/^\d{5}$/, "KBLI 5 digit (mis. 93112)"),
-      directors: z.array(person).min(1, "Isi minimal satu direktur").max(10),
+      legalName: z.string().trim().min(3, "Legal name must be at least 3 characters.").max(100),
+      nib: z.string().trim().regex(/^\d{13}$/, "NIB must contain 13 digits."),
+      npwp: z.string().trim().regex(/^(\d{15}|\d{16})$/, "NPWP must contain 15 or 16 digits, without punctuation."),
+      deedNumber: z.string().trim().min(1, "Enter the deed number.").max(40),
+      deedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD deed date format."),
+      registeredAddress: z.string().trim().min(10, "Registered address must be at least 10 characters.").max(250),
+      kbli: z.string().trim().regex(/^\d{5}$/, "KBLI must contain 5 digits (e.g. 93112)."),
+      directors: z.array(person).min(1, "Add at least one director.").max(10),
       commissioners: z.array(person).max(10).default([]),
-      signatoryName: z.string().trim().min(3, "Nama penandatangan wajib diisi").max(100),
-      signatoryTitle: z.string().trim().min(2, "Jabatan penandatangan wajib diisi").max(60),
-      contactEmail: z.string().trim().email("Email kontak tidak valid"),
-      contactPhone: z.string().trim().regex(/^(\+62|62|0)8\d{7,11}$/, "Nomor HP tidak valid (mis. 08123456789)"),
+      signatoryName: z.string().trim().min(3, "Enter the signatory’s name.").max(100),
+      signatoryTitle: z.string().trim().min(2, "Enter the signatory’s title.").max(60),
+      contactEmail: z.string().trim().email("Enter a valid contact email address."),
+      contactPhone: z.string().trim().regex(/^(\+62|62|0)8\d{7,11}$/, "Enter a valid Indonesian mobile number (e.g. 08123456789)."),
     }),
     /** Pemilik manfaat dengan kepemilikan ≥25%. */
     beneficialOwners: z
       .array(z.object({
         fullName: z.string().trim().min(3).max(100),
-        ownershipPct: z.number().min(25, "Hanya pemilik manfaat ≥25% yang wajib dicantumkan").max(100),
-        idNumber: z.string().trim().regex(/^\d{16}$/, "NIK 16 digit"),
+        ownershipPct: z.number().min(25, "Only beneficial owners with at least 25% ownership are required.").max(100),
+        idNumber: z.string().trim().regex(/^\d{16}$/, "National ID must contain 16 digits."),
       }))
-      .min(1, "Isi minimal satu pemilik manfaat ≥25%")
+      .min(1, "Add at least one beneficial owner with 25% or more ownership.")
       .max(4),
     venue: z.object({
-      name: z.string().trim().min(3, "Nama venue minimal 3 karakter").max(60),
+      name: z.string().trim().min(3, "Venue name must be at least 3 characters.").max(60),
       address: z.string().trim().min(10).max(250),
       city: z.string().trim().min(2).max(60),
       province: z.string().trim().min(2).max(60),
       lat: z.number().min(-11).max(6).nullable().default(null),
       lng: z.number().min(95).max(141).nullable().default(null),
-      sports: z.array(z.enum(SPORT_OPTIONS)).min(1, "Pilih minimal satu jenis olahraga"),
+      sports: z.array(z.enum(SPORT_OPTIONS)).min(1, "Choose at least one sport."),
       openHour: z.number().int().min(0).max(23),
       closeHour: z.number().int().min(1).max(24),
       operatingSince: yyyymm,
-      facilities: z.array(Facility).min(1, "Isi minimal satu lapangan").max(40),
+      facilities: z.array(Facility).min(1, "Add at least one facility.").max(40),
     }),
     land: z.object({
       /** Gerbang: tanah harus milik badan usaha/pemilik sendiri (§2.3). */
@@ -106,9 +106,9 @@ export const OnboardingInput = z
       encumbranceConsent: z.boolean().default(false),
       permits: z.array(z.string().trim().min(2).max(60)).max(10).default([]),
       /** V_aset klaim owner (tanah + bangunan + peralatan). Reviewer menetapkan nilai final dari dokumen. */
-      assetValue: z.number().int().positive("Isi perkiraan nilai aset"),
+      assetValue: z.number().int().positive("Enter the estimated asset value."),
     }),
-    financials: z.array(FinancialMonth).min(MIN_FINANCIAL_MONTHS, `Isi minimal ${MIN_FINANCIAL_MONTHS} bulan (disarankan 12)`).max(MAX_FINANCIAL_MONTHS),
+    financials: z.array(FinancialMonth).min(MIN_FINANCIAL_MONTHS, `Provide at least ${MIN_FINANCIAL_MONTHS} months of financial data (12 recommended).`).max(MAX_FINANCIAL_MONTHS),
     debt: z.object({
       outstanding: rupiah,
       monthlyInstallment: rupiah,
@@ -118,39 +118,39 @@ export const OnboardingInput = z
     }),
     offering: z.object({
       tokenPrice: z.number().int().min(1000).max(100_000_000).optional(),
-      stakeBps: z.number().int().min(MIN_STAKE_BPS, `Minimal ${MIN_STAKE_BPS / 100}%`).max(MAX_STAKE_BPS, `Maksimal ${MAX_STAKE_BPS / 100}%`),
-      useOfFunds: z.string().trim().min(10, "Jelaskan rencana penggunaan dana (minimal 10 karakter)").max(400),
+      stakeBps: z.number().int().min(MIN_STAKE_BPS, `Minimum ${MIN_STAKE_BPS / 100}%.`).max(MAX_STAKE_BPS, `Maximum ${MAX_STAKE_BPS / 100}%.`),
+      useOfFunds: z.string().trim().min(10, "Describe how you plan to use the funds (at least 10 characters).").max(400),
     }),
     /** Rekening tujuan owner: atas nama badan usaha. Tidak pernah dibuka. */
     payout: z.object({
       bank: z.string().trim().min(2).max(40),
       accountName: z.string().trim().min(3).max(100),
-      accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Nomor rekening 6–20 digit"),
+      accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Account number must contain 6–20 digits."),
     }),
     integrations: z.object({
       /** Owner setuju semua pembayaran digital venue lewat gateway yang ditetapkan platform (split-at-source). */
-      gatewayOnly: z.literal(true, { errorMap: () => ({ message: "Wajib setuju semua pembayaran digital lewat gateway platform" }) }),
+      gatewayOnly: z.literal(true, { errorMap: () => ({ message: "You must agree to route all digital venue payments through the platform gateway." }) }),
       bankDataAccess: z.boolean(),
     }),
     consent: z.object({
-      dataProcessing: z.literal(true, { errorMap: () => ({ message: "Persetujuan pemrosesan data (termasuk analisis AI) wajib dicentang" }) }),
-      truthful: z.literal(true, { errorMap: () => ({ message: "Pernyataan data benar wajib dicentang" }) }),
+      dataProcessing: z.literal(true, { errorMap: () => ({ message: "Consent to data processing, including AI analysis, is required." }) }),
+      truthful: z.literal(true, { errorMap: () => ({ message: "You must confirm that the submitted information is accurate." }) }),
     }),
   })
   .superRefine((v, ctx) => {
-    if (v.venue.closeHour <= v.venue.openHour) ctx.addIssue({ code: "custom", path: ["venue", "closeHour"], message: "Jam tutup harus setelah jam buka" });
-    if (v.land.encumbered === false && v.land.encumbranceConsent) ctx.addIssue({ code: "custom", path: ["land", "encumbranceConsent"], message: "Persetujuan kreditur hanya relevan bila lahan dijaminkan" });
+    if (v.venue.closeHour <= v.venue.openHour) ctx.addIssue({ code: "custom", path: ["venue", "closeHour"], message: "Closing time must be later than opening time." });
+    if (v.land.encumbered === false && v.land.encumbranceConsent) ctx.addIssue({ code: "custom", path: ["land", "encumbranceConsent"], message: "Lender consent only applies when the land is pledged." });
     const months = v.financials.map((m) => m.month);
-    if (new Set(months).size !== months.length) ctx.addIssue({ code: "custom", path: ["financials"], message: "Ada bulan yang muncul dua kali" });
+    if (new Set(months).size !== months.length) ctx.addIssue({ code: "custom", path: ["financials"], message: "A month appears more than once." });
     const sorted = [...months].sort();
-    if (sorted.join() !== months.join()) ctx.addIssue({ code: "custom", path: ["financials"], message: "Urutkan bulan dari lama ke baru" });
+    if (sorted.join() !== months.join()) ctx.addIssue({ code: "custom", path: ["financials"], message: "Sort months from oldest to newest." });
     v.financials.forEach((m, i) => {
       const d = m.refunds + m.opex + m.tax + m.operatorFee + m.reserve + m.platformFee;
-      if (d > m.gross) ctx.addIssue({ code: "custom", path: ["financials", i], message: `${m.month}: total potongan melebihi omzet kotor` });
-      if (m.digitalGross > m.gross) ctx.addIssue({ code: "custom", path: ["financials", i, "digitalGross"], message: `${m.month}: omzet digital melebihi omzet kotor` });
+      if (d > m.gross) ctx.addIssue({ code: "custom", path: ["financials", i], message: `${m.month}: total deductions exceed gross revenue.` });
+      if (m.digitalGross > m.gross) ctx.addIssue({ code: "custom", path: ["financials", i, "digitalGross"], message: `${m.month}: digital revenue exceeds gross revenue.` });
     });
-    if (v.beneficialOwners.reduce((a, o) => a + o.ownershipPct, 0) > 100) ctx.addIssue({ code: "custom", path: ["beneficialOwners"], message: "Total kepemilikan melebihi 100%" });
-    if (v.debt.outstanding > 0 && v.debt.lender.length < 2) ctx.addIssue({ code: "custom", path: ["debt", "lender"], message: "Isi nama kreditur" });
+    if (v.beneficialOwners.reduce((a, o) => a + o.ownershipPct, 0) > 100) ctx.addIssue({ code: "custom", path: ["beneficialOwners"], message: "Total ownership exceeds 100%." });
+    if (v.debt.outstanding > 0 && v.debt.lender.length < 2) ctx.addIssue({ code: "custom", path: ["debt", "lender"], message: "Enter the lender’s name." });
   });
 export type OnboardingInput = z.infer<typeof OnboardingInput>;
 

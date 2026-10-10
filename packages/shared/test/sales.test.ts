@@ -17,8 +17,8 @@ describe("data penjualan: template bulanan", () => {
   it("bulan berjalan tidak dihitung; kurang dari 6 bulan ditolak", () => {
     const r = monthly(["2026-08,1,0,0,0", "2026-09,1,0,0,0", "2026-10,5,0,0,0"]);
     expect(r.labels).toEqual(["2026-08", "2026-09"]);
-    expect(r.notes.join(" ")).toContain("Bulan berjalan");
-    expect(r.errors.join(" ")).toContain("minimal 6");
+    expect(r.notes.join(" ")).toContain("Current month");
+    expect(r.errors.join(" ")).toContain("at least 6");
   });
   it("celah bulan: hanya rangkaian terbaru yang dipakai dan dilaporkan", () => {
     const r = monthly(["2026-01,1,0,0,0", "2026-02,1,0,0,0", "2026-05,1,0,0,0", "2026-06,1,0,0,0", "2026-07,1,0,0,0", "2026-08,1,0,0,0", "2026-09,1,0,0,0", "2026-04,1,0,0,0"]);
@@ -27,11 +27,11 @@ describe("data penjualan: template bulanan", () => {
     expect(r.notes.join(" ")).toContain("2026-03");
   });
   it("bulan ganda, angka desimal, dan pengurang melebihi bruto ditolak", () => {
-    expect(monthly(["2026-08,1,0,0,0", "2026-08,2,0,0,0"]).errors.join(" ")).toContain("dua kali");
-    expect(monthly(["2026-08,1.5,0,0,0"]).errors.join(" ")).toContain("rupiah bulat");
-    expect(monthly(["2026-03,100,90,20,0", "2026-04,1,0,0,0", "2026-05,1,0,0,0", "2026-06,1,0,0,0", "2026-07,1,0,0,0", "2026-08,1,0,0,0"]).errors.join(" ")).toContain("melebihi");
+    expect(monthly(["2026-08,1,0,0,0", "2026-08,2,0,0,0"]).errors.join(" ")).toContain("appears more than once");
+    expect(monthly(["2026-08,1.5,0,0,0"]).errors.join(" ")).toContain("whole rupiah");
+    expect(monthly(["2026-03,100,90,20,0", "2026-04,1,0,0,0", "2026-05,1,0,0,0", "2026-06,1,0,0,0", "2026-07,1,0,0,0", "2026-08,1,0,0,0"]).errors.join(" ")).toContain("exceed gross revenue");
   });
-  it("kolom wajib hilang dilaporkan", () => expect(parseSalesTable(parseCsv("bulan,bruto\n2026-01,1"), NOW).errors[0]).toContain("Kolom wajib"));
+  it("kolom wajib hilang dilaporkan", () => expect(parseSalesTable(parseCsv("bulan,bruto\n2026-01,1"), NOW).errors[0]).toContain("Required columns"));
   it("template contoh bisa dibaca (struktur)", () => expect(parseSalesTable(parseCsv(SALES_TEMPLATE_MONTHLY), NOW).labels).toEqual(["2026-01", "2026-02"]));
 });
 
@@ -54,7 +54,7 @@ describe("data penjualan: ekspor transaksi", () => {
     expect(aug.digitalGross).toBe(110_000);
     expect(aug.refunds).toBe(110_000);
     expect(aug.tax).toBe(20_000); // 2 × 110000/11
-    expect(r.notes.join(" ")).toContain("Pajak diperkirakan");
+    expect(r.notes.join(" ")).toContain("Tax was estimated");
   });
   it("transaksi 1 Oktober 00:30 WIB jatuh ke Oktober (bulan berjalan, tidak dihitung); 30 September 23:30 WIB ke September", () => {
     const r = parseSalesTable(parseCsv([head, "A,2026-10-01T00:30:00+07:00,1000,penjualan,tunai,,,,", "B,2026-09-30T23:30:00+07:00,1000,penjualan,tunai,,,,"].join("\n")), NOW);
@@ -62,6 +62,6 @@ describe("data penjualan: ekspor transaksi", () => {
   });
   it("galat baris dilaporkan dengan nomor baris", () => {
     const r = parseSalesTable(parseCsv([head, "A,2026-08-01T00:00:00+07:00,x,penjualan,tunai,,,,"].join("\n")), NOW);
-    expect(r.errors.join(" ")).toContain("Baris 2");
+    expect(r.errors.join(" ")).toContain("Row 2");
   });
 });

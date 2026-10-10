@@ -41,14 +41,14 @@ const empty = (month: string): FinancialMonth => ({ month, gross: 0, refunds: 0,
 function finish(mode: SalesResult["mode"], by: Map<string, FinancialMonth>, notes: string[], errors: string[], nowKey: string): SalesResult {
   const keys = [...by.keys()];
   const partial = keys.filter((k) => k >= nowKey);
-  if (partial.length) notes.push(`Bulan berjalan (${partial.join(", ")}) tidak dihitung karena belum penuh.`);
+  if (partial.length) notes.push(`Current month (${partial.join(", ")}) excluded because it is incomplete.`);
   const { run, gaps } = contiguousTail(keys.filter((k) => k < nowKey));
-  if (gaps.length) notes.push(`Ada bulan kosong (${gaps.slice(0, 4).join(", ")}${gaps.length > 4 ? ", …" : ""}); hanya rangkaian bulan berurutan terbaru yang dipakai.`);
+  if (gaps.length) notes.push(`Missing months (${gaps.slice(0, 4).join(", ")}${gaps.length > 4 ? ", …" : ""}); only the latest consecutive range is used.`);
   const months = run.map((k) => by.get(k)!);
-  if (run.length < MIN_SALES_MONTHS) errors.push(`Data berurutan hanya ${run.length} bulan penuh; minimal ${MIN_SALES_MONTHS} bulan (disarankan 12).`);
+  if (run.length < MIN_SALES_MONTHS) errors.push(`Only ${run.length} complete consecutive months; at least ${MIN_SALES_MONTHS} are required (12 recommended).`);
   for (const m of months) {
-    if (m.refunds + m.opex + m.tax + m.operatorFee + m.reserve + m.platformFee > m.gross) errors.push(`${m.month}: total potongan melebihi omzet kotor.`);
-    if (m.digitalGross > m.gross) errors.push(`${m.month}: omzet digital melebihi omzet kotor.`);
+    if (m.refunds + m.opex + m.tax + m.operatorFee + m.reserve + m.platformFee > m.gross) errors.push(`${m.month}: total deductions exceed gross revenue.`);
+    if (m.digitalGross > m.gross) errors.push(`${m.month}: digital revenue exceeds gross revenue.`);
   }
   return { mode, labels: run, months, notes, errors };
 }
@@ -58,16 +58,16 @@ function fromMonthly(table: string[][], nowKey: string): SalesResult {
   const head = table[0]!.map((h) => h.trim().toLowerCase());
   const errors: string[] = [], notes: string[] = [];
   const need = SALES_COLUMNS.filter((h) => !head.includes(h));
-  if (need.length) return { mode: "monthly", labels: [], months: [], notes, errors: [`Kolom wajib tidak ada: ${need.join(", ")}`] };
+  if (need.length) return { mode: "monthly", labels: [], months: [], notes, errors: [`Required columns missing: ${need.join(", ")}`] };
   const by = new Map<string, FinancialMonth>();
   table.slice(1).forEach((cells, i) => {
     if (cells.every((c) => c.trim() === "")) return;
     const g = (k: string) => (cells[head.indexOf(k)] ?? "").trim();
     const m = /^(\d{4}-\d{2})/.exec(g("bulan"));
     const vals = SALES_COLUMNS.slice(1).map((k) => (g(k) === "" ? 0 : parseRupiah(g(k))));
-    if (!m) return void errors.push(`Baris ${i + 2}: bulan tidak valid "${g("bulan")}" (format YYYY-MM)`);
-    if (vals.some((v) => v === null)) return void errors.push(`Baris ${i + 2}: angka harus rupiah bulat (tanpa desimal)`);
-    if (by.has(m[1]!)) return void errors.push(`Baris ${i + 2}: bulan ${m[1]} muncul dua kali`);
+    if (!m) return void errors.push(`Row ${i + 2}: invalid month "${g("bulan")}" (use YYYY-MM format).`);
+    if (vals.some((v) => v === null)) return void errors.push(`Row ${i + 2}: amounts must be whole rupiah (no decimals).`);
+    if (by.has(m[1]!)) return void errors.push(`Row ${i + 2}: month ${m[1]} appears more than once.`);
     const [gross, refunds, opex, tax, operatorFee, reserve, platformFee, digitalGross] = vals as number[];
     by.set(m[1]!, { month: m[1]!, gross: gross!, refunds: refunds!, opex: opex!, tax: tax!, operatorFee: operatorFee!, reserve: reserve!, platformFee: platformFee!, digitalGross: digitalGross!, bankCredits: null });
   });
@@ -77,9 +77,23 @@ function fromMonthly(table: string[][], nowKey: string): SalesResult {
 /** Ekspor transaksi (kolom sama dengan impor PoS): omzet, refund, pajak, dan porsi digital per bulan WIB. Biaya diisi owner di formulir. */
 function fromTransactions(table: string[][], nowKey: string): SalesResult {
   const parsed = rowsFromTable(table);
-  const errors = parsed.errors.slice(0, 8).map((e) => `Baris ${e.line}: ${e.message}`);
-  if (parsed.errors.length > 8) errors.push(`… dan ${parsed.errors.length - 8} baris bermasalah lainnya`);
-  const notes: string[] = ["Ekspor transaksi hanya memuat omzet, refund, dan pajak. Isi biaya operasional, fee, dan cadangan per bulan di formulir."];
+  const translateImportError = (message: string) => message
+    .replace(/^Kolom wajib tidak ada:/, "Required columns missing:")
+    .replace(/^Maksimal (\d+) baris per impor$/, "Maximum $1 rows per import.")
+    .replace(/^jumlah tidak valid:/, "Invalid amount:")
+    .replace(/^tanggal tidak valid:/, "Invalid date:")
+    .replace(/^tipe tidak dikenal:/, "Unknown transaction type:")
+    .replace("(penjualan/refund)", "(sale/refund)")
+    .replace(/^metode tidak dikenal:/, "Unknown payment method:")
+    .replace("(gateway/tunai/qris_sendiri)", "(gateway/cash/static QRIS)")
+    .replace("biaya/pajak harus angka rupiah bulat", "Fee and tax must be whole-rupiah amounts.")
+    .replace("refund wajib punya ref_asal", "A refund must reference its original sale.")
+    .replace("penjualan via gateway wajib punya psp_ref (dicocokkan dengan laporan settlement)", "Gateway sales must include a PSP reference for settlement reconciliation.")
+    .replace(/^ref ganda dalam file:/, "Duplicate reference in file:")
+    .replace(/^File kosong$/, "File is empty.");
+  const errors = parsed.errors.slice(0, 8).map((e) => `Row ${e.line}: ${translateImportError(e.message)}`);
+  if (parsed.errors.length > 8) errors.push(`… and ${parsed.errors.length - 8} more rows contain errors.`);
+  const notes: string[] = ["Transaction exports include revenue, refunds, and tax only. Enter monthly operating expenses, fees, and reserves in the form."];
   const rows: ImportRow[] = parsed.rows;
   const by = new Map<string, FinancialMonth>();
   const get = (k: string) => by.get(k) ?? (by.set(k, empty(k)), by.get(k)!);
@@ -91,14 +105,14 @@ function fromTransactions(table: string[][], nowKey: string): SalesResult {
     if (r.method !== "cash") m.digitalGross += r.amount;
     if (r.tax === undefined) { m.tax += Math.round(r.amount / 11); taxGuess++; } else m.tax += r.tax;
   }
-  if (taxGuess) notes.push(`Pajak diperkirakan 1/11 dari nilai transaksi pada ${taxGuess} baris tanpa kolom pajak (asumsi harga sudah termasuk PB1 10%).`);
+  if (taxGuess) notes.push(`Tax was estimated at 1/11 of the transaction amount for ${taxGuess} rows without a tax column (assumes prices include 10% PB1).`);
   return finish("transactions", by, notes, errors, nowKey);
 }
 
 /** Deteksi format dari header: ada kolom "bulan" = template bulanan; selain itu dianggap ekspor transaksi. */
 export function parseSalesTable(table: string[][], now = new Date()): SalesResult {
   const nowKey = monthKey(now.toISOString());
-  if (table.length === 0 || table[0]!.every((c) => c.trim() === "")) return { mode: "monthly", labels: [], months: [], notes: [], errors: ["File kosong"] };
+  if (table.length === 0 || table[0]!.every((c) => c.trim() === "")) return { mode: "monthly", labels: [], months: [], notes: [], errors: ["File is empty."] };
   const head = table[0]!.map((h) => h.trim().toLowerCase());
   return head.includes("bulan") ? fromMonthly(table, nowKey) : fromTransactions(table, nowKey);
 }

@@ -52,14 +52,14 @@ export interface Valuation {
 }
 
 export function valuation(i: ValuationInput): Valuation {
-  if (i.d12 <= 0) throw new Error("D12 harus positif: tanpa laba bersih terverifikasi, venue tidak bisa divaluasi");
-  if (i.assetValue <= 0) throw new Error("Nilai aset harus positif");
+  if (i.d12 <= 0) throw new Error("D12 must be positive; a venue cannot be valued without verified distributable profit.");
+  if (i.assetValue <= 0) throw new Error("Asset value must be positive.");
   const vIncome = Math.floor((i.d12 * 10_000) / i.requiredYieldBps);
   const raw = Math.min(i.assetValue, vIncome);
   // S = V × X harus habis dibagi p, dan kontrak memeriksa refPrice × N × 10000 == V × X: pilih V kelipatan unit itu
   const step = (i.tokenPrice * 10_000) / gcd(i.stakeBps, i.tokenPrice * 10_000);
   const v = Math.floor(raw / step) * step;
-  if (v <= 0) throw new Error("Valuasi terlalu kecil untuk harga token ini");
+  if (v <= 0) throw new Error("Valuation is too small for this token price.");
   const stakeValue = (v * i.stakeBps) / 10_000;
   const supply = stakeValue / i.tokenPrice;
   const yieldBps = Math.floor((i.d12 * 10_000) / v);
@@ -96,10 +96,10 @@ export interface WaterfallResult {
 
 /** Sama dengan pemeriksaan kontrak: potongan ≤ omzet kotor dan opex ≤ plafon. Lempar Error bila dilanggar. */
 export function checkWaterfall(w: Waterfall, maxOpexBps: number) {
-  for (const [k, v] of Object.entries(w)) if (!Number.isInteger(v) || v < 0) throw new Error(`${k} harus bilangan bulat ≥ 0`);
+  for (const [k, v] of Object.entries(w)) if (!Number.isInteger(v) || v < 0) throw new Error(`${k} must be a whole number ≥ 0.`);
   const d = w.refunds + w.opex + w.tax + w.operatorFee + w.reserve + w.platformFee;
-  if (d > w.gross) throw new Error("Total potongan melebihi omzet kotor (kontrak akan menolak)");
-  if (w.opex * 10_000 > w.gross * maxOpexBps) throw new Error(`Biaya operasional melebihi plafon ${maxOpexBps / 100}% omzet (kontrak akan menolak)`);
+  if (d > w.gross) throw new Error("Total deductions exceed gross revenue (the contract will reject this).");
+  if (w.opex * 10_000 > w.gross * maxOpexBps) throw new Error(`Operating expenses exceed the ${maxOpexBps / 100}% gross-revenue cap (the contract will reject this).`);
 }
 
 export function waterfall(w: Waterfall, stakeBps: number, spvFeeBps: number): WaterfallResult {
@@ -141,6 +141,6 @@ export const sellbackPrice = (refPrice: number, discountBps: number) => refPrice
 /** Sama dengan kontrak: paid × 10000 == tokens × ref × (10000 − d). */
 export function sellbackAmount(tokens: number, refPrice: number, discountBps: number): number {
   const scaled = tokens * refPrice * (10_000 - discountBps);
-  if (scaled % 10_000 !== 0) throw new Error("Jumlah token ini menghasilkan pecahan rupiah; ubah jumlahnya");
+  if (scaled % 10_000 !== 0) throw new Error("This token quantity produces a fractional rupiah amount. Change the quantity.");
   return scaled / 10_000;
 }

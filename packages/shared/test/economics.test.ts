@@ -39,8 +39,8 @@ describe("contoh hitung PRD §4.6", () => {
 describe("pemeriksaan yang juga dilakukan kontrak", () => {
   it("D tidak pernah negatif", () => expect(waterfall({ ...month, opex: 50_000_000, refunds: 0, tax: 0, operatorFee: 0, reserve: 0, platformFee: 0 }, 5000, 200).distributable).toBe(2_000_000));
   it("potongan > gross dan opex > plafon ditolak", () => {
-    expect(() => checkWaterfall({ ...month, opex: 50_000_000 }, 8000)).toThrow(/melebihi omzet/);
-    expect(() => checkWaterfall({ ...month, gross: 30_000_000, opex: 25_000_000, refunds: 0, tax: 0, operatorFee: 0, reserve: 0, platformFee: 0 }, 8000)).toThrow(/plafon/);
+    expect(() => checkWaterfall({ ...month, opex: 50_000_000 }, 8000)).toThrow(/deductions exceed gross/);
+    expect(() => checkWaterfall({ ...month, gross: 30_000_000, opex: 25_000_000, refunds: 0, tax: 0, operatorFee: 0, reserve: 0, platformFee: 0 }, 8000)).toThrow(/Operating expenses exceed/);
     expect(() => checkWaterfall(month, 8000)).not.toThrow();
   });
 });
