@@ -2,13 +2,14 @@
 
 ## Direction
 
-English Platform home only. Large editorial typography, generous court photography,
+English Platform home only. Centered "Open Grounds." wordmark on an orange mesh
+and directional flow field, sand-like grain, generous court photography,
 asymmetric content, and simple primary actions. The product is participation in
 distributable net profit, not ownership of a court, land, or the owner's company.
 
-Regular: navigation → oversized headline → explanation/actions → wide court photo →
-two-column introduction → curved gallery → four-step process → live listings →
-owner pathway → FAQ → orange closing → disclosures.
+Regular: navigation → centered mesh/flow hero → two-column introduction and court
+photo → black curved gallery → four-step process → live listings → pale-orange
+owner pathway → FAQ → orange closing → black footer/disclosures.
 
 Compact: same content/order, stacked columns, accessible expandable navigation,
 two-column process (one below 540px), full-width photography, native FAQ disclosures.
@@ -29,19 +30,45 @@ two-column process (one below 540px), full-width photography, native FAQ disclos
 - [React Bits AnimatedContent](https://reactbits.dev/animations/animated-content)
   was inspected alongside its TypeScript source. Its GSAP/ScrollTrigger dependency
   is unnecessary for these one-time entrances: IntersectionObserver + CSS handles
-  them. The user-supplied sliced-cylinder gallery is the signature motion section.
+  them. No React Bits source is included: the supplied canvas and sliced-cylinder
+  components cover the requested motion without GSAP or an extra animation runtime.
+
+## Hero revision
+
+The user's 21st.dev Shader Builder "Mesh drift" recipe supplies four moving
+Gaussian color fields. Active palette is Sunrise orange, white-softened orange,
+and white; inactive OKLab, blur, warp, and cursor modes are omitted. Film grain
+uses the supplied Dave Hoskins `hash12` implementation.
+
+The supplied FluidFlowGrid is adapted as a transparent Canvas 2D layer over the
+mesh. Orange/black strokes replace blue, the OS color scheme does not change the
+palette, and field size follows the hero rather than the window. Masks keep the
+flow at the edges, away from body copy. Photography now supports the introduction
+instead of competing with the centered hero.
+
+Both renderers use `useCanvasAnimation`: 30fps, DPR capped at 1.5, at most
+1,200,000 pixels per layer, ResizeObserver sizing, off-screen/hidden-tab suspension,
+pause/resume, and live reduced-motion changes. Elapsed time freezes while paused.
+The WebGL renderer validates shader compilation/linking, releases its resources,
+and defers context release across Strict Mode remounts. An orange CSS poster
+remains readable before hydration or when WebGL is unavailable/lost.
+
+`landing-grain.svg` adds static, tiled fractal grain to paper, orange, and black
+surfaces. Its maximum black alpha is 12%, so texture does not sacrifice readability.
 
 ## Tokens and accessibility
 
 Reuse Plus Jakarta Sans (display) and Inter (body) from the existing system.
-Desktop scale: 94px maximum hero, 58px section headings, 23px subheads, 16px body.
-Compact hero: 33–58px; body: 15–16px. All action targets are at least 44px tall.
+Desktop scale: 160px maximum hero, 58px section headings, 23px subheads, 16px body.
+Compact hero: 56–104px; body: 15–16px. Primary controls are at least 44px tall.
 
-Colors: Midnight `#0F172A` (content), Slate `#334155` (secondary content),
-Sunrise `#FF7A00` (primary action/highlight), Amber `#FFD166` (secondary highlight),
-Ivory `#F8FAFC` (soft surfaces), white (page).
-Calculated contrasts: Midnight/Sunrise 6.83:1, Midnight/Amber 12.38:1,
-Slate/Ivory 9.90:1, Ivory/Midnight 17.06:1.
+Landing-only colors: carbon `#171717` (content and black sections), neutral
+`#55524F` (secondary content), paper `#FAF9F6`, Sunrise `#FF7A00`, and orange
+lightened with white (`#FFC99A`, `#FFE4CC`). Existing shared fonts and logo stay
+the brand anchors. Palette follows the requested white/black/orange direction.
+Calculated contrasts before texture: carbon/Sunrise 6.86:1, secondary/paper 7.37:1,
+paper/carbon 17.03:1, secondary on black (`#C4C1BB`) 9.98:1. Carbon against the
+darkest theoretical orange mesh plus film grain and 12% black texture is 5.00:1.
 
 Applied Apple design references: `typography.md › Conveying hierarchy` (few
 typefaces, distinct hierarchy), `branding.md › Best practices` (accent used
@@ -94,6 +121,13 @@ replace them with licensed photography before a public production release.
 
 `NEXT_DIST_DIR=.next-build NODE_OPTIONS="--max-old-space-size=1536" pnpm --filter @venue-rwa/platform exec next build --webpack`
 
+Runnable motion check (server running): `node apps/platform/scripts/check-landing-motion.mjs`.
+It uses externally installed Playwright. Set `PLAYWRIGHT_MODULE` to its module path
+and optionally `CHROMIUM_PATH` to an existing Chromium executable. `LANDING_URL`
+defaults to `http://localhost:3000`. The check observes actual draw calls rather
+than inferring animation from styles.
+
 Browser checks: 320/390/768/1440px, 200% text, FAQ keyboard interaction, menu
-Escape/close, English copy, valid local images, pause/resume, reduced-motion,
-legacy route navigation, axe accessibility scan.
+Escape/close, English copy, valid local images, gallery and background pause/resume,
+reduced-motion, off-screen rendering suspension, bounded canvas size, WebGL
+fallback/context loss, legacy route navigation, and axe accessibility scan.
