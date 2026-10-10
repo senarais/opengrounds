@@ -34,8 +34,8 @@ const safe = (n: string) => n.normalize("NFKD").replace(/[^A-Za-z0-9._-]+/g, "_"
 
 /** Unggah dokumen ke bucket privat; kembalikan path, sha256, dan ukuran. */
 export async function uploadDocument(venueId: string, kind: string, file: File) {
-  if (file.size === 0) throw new Error(`File ${file.name} kosong`);
-  if (file.size > MAX_FILE_BYTES) throw new Error(`File ${file.name} lebih dari 10 MB`);
+  if (file.size === 0) throw new Error(`File ${file.name} is empty.`);
+  if (file.size > MAX_FILE_BYTES) throw new Error(`File ${file.name} exceeds the 10 MB limit.`);
   const type = kind === "sales_data" ? (sheetType(file) ?? file.type) : file.type;
   if (kind === "sales_data" ? !SHEET_TYPES.includes(type) : !ALLOWED_TYPES.includes(type)) throw new Error(kind === "sales_data" ? `Unsupported format for ${file.name} · use CSV or XLSX.` : `Unsupported format for ${file.name} · use PDF, PNG, or JPG.`);
   if (kind === "photo" && !IMAGE_TYPES.includes(file.type)) throw new Error(`Photo ${file.name} must be PNG or JPG.`);
