@@ -56,7 +56,7 @@ describe("automatic acquisition preparation", () => {
   });
   it("refuses to prepare before review is approved", async () => {
     h.reviewStatus = "IN_REVIEW";
-    await expect(prepareAcquisition("series-1")).rejects.toThrow("Review belum disetujui");
+    await expect(prepareAcquisition("series-1")).rejects.toThrow("Review is not approved");
     expect(h.create).not.toHaveBeenCalled();
     expect(h.sign).not.toHaveBeenCalled();
   });

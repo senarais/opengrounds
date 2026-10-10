@@ -24,12 +24,12 @@ export const providerFor = (pspRef: string): PaymentProvider => (pspRef.startsWi
 
 function xendit(): PaymentProvider {
   const key = process.env.XENDIT_SECRET_KEY;
-  if (!key) throw new Error("XENDIT_SECRET_KEY belum diisi di .env");
+  if (!key) throw new Error("Set XENDIT_SECRET_KEY in .env.");
   const auth = "Basic " + Buffer.from(`${key}:`).toString("base64");
   const call = async (path: string, init?: RequestInit) => {
     const res = await fetch(`https://api.xendit.co${path}`, { ...init, headers: { Authorization: auth, "Content-Type": "application/json" }, cache: "no-store" });
     const body: any = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`Xendit ${res.status}: ${body.message ?? body.error_code ?? "gagal"}`);
+  if (!res.ok) throw new Error(`Xendit ${res.status}: ${body.message ?? body.error_code ?? "request failed"}`);
     return body;
   };
   return {
@@ -79,7 +79,7 @@ function mock(): PaymentProvider {
 
 const secret = () => {
   const s = process.env.INTERNAL_API_TOKEN;
-  if (!s) throw new Error("INTERNAL_API_TOKEN belum diisi (dipakai menandatangani webhook sandbox)");
+  if (!s) throw new Error("Set INTERNAL_API_TOKEN to sign sandbox webhooks.");
   return s;
 };
 export const signMockWebhook = (body: string, ts: string) => createHmac("sha256", secret()).update(`${ts}.${body}`).digest("hex");
@@ -94,8 +94,8 @@ export function verifyMockWebhook(body: string, ts: string | null, sig: string |
 export async function payMockCharge(ref: string): Promise<void> {
   const pf = platformDb();
   const { data } = await pf.from("mock_charges").select("*").eq("ref", ref).maybeSingle();
-  if (!data) throw new Error("Tagihan sandbox tidak ditemukan");
+  if (!data) throw new Error("Sandbox payment request not found.");
   if (data.status === "paid") return;
-  if (data.status !== "pending" || Date.parse(data.expires_at) < Date.now()) throw new Error("Tagihan sandbox sudah kedaluwarsa");
+  if (data.status !== "pending" || Date.parse(data.expires_at) < Date.now()) throw new Error("Sandbox payment request has expired.");
   await pf.from("mock_charges").update({ status: "paid", paid_at: new Date().toISOString() }).eq("ref", ref).eq("status", "pending");
 }

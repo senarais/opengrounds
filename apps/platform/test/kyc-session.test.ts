@@ -46,7 +46,7 @@ describe("Didit session idempotency", () => {
   it("never takes over a session belonging to another account", async () => {
     h.insert.mockResolvedValue({ error: { code: "23505" } });
     h.results.push(result({ user_id: "user-2", state: "pending", url: "https://verify.didit.me/other" }));
-    await expect(startDiditKyc("user-1", null, "https://grounds.test")).rejects.toThrow("tidak cocok");
+    await expect(startDiditKyc("user-1", null, "https://grounds.test")).rejects.toThrow("does not match your account");
   });
   it("does not hide unrelated database failures", async () => {
     h.insert.mockResolvedValue({ error: { code: "08006", message: "Connection failed" } });

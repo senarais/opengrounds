@@ -15,8 +15,8 @@ const STALE_CLAIM_MS = 3 * 60_000;
 const OPEN = ["AWAITING_SIGNATURE", "AWAITING_PAYMENT", "PAID"];
 
 export const ORDER_STATUS_LABEL: Record<string, string> = {
-  AWAITING_SIGNATURE: "Menunggu tanda tangan", AWAITING_PAYMENT: "Menunggu pembayaran", PAID: "Dibayar, token sedang dialokasikan",
-  ALLOCATED: "Token masuk", EXPIRED: "Kedaluwarsa", CANCELLED: "Dibatalkan", FAILED: "Gagal",
+  AWAITING_SIGNATURE: "Awaiting signature", AWAITING_PAYMENT: "Awaiting payment", PAID: "Paid · allocating tokens",
+  ALLOCATED: "Tokens allocated", EXPIRED: "Expired", CANCELLED: "Cancelled", FAILED: "Failed",
 };
 
 export function orderMessage(o: any): OrderMessage {
@@ -36,15 +36,15 @@ async function reserved(seriesId: string): Promise<number> {
  */
 export async function createOrder(me: { userId: string; wallet: string | null }, seriesId: string, tokens: number, funding: "payment" | "balance") {
   await assertCanBuy(me);
-  if (!Number.isInteger(tokens) || tokens < 1) throw new Error("Jumlah token minimal 1");
+  if (!Number.isInteger(tokens) || tokens < 1) throw new Error("Buy at least one token.");
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const info = await readSeries(addr);
-  if (info.state !== "Active") throw new Error(`Seri berstatus ${info.state}: pembelian hanya saat Active`);
+  if (info.state !== "Active") throw new Error(`Series is ${info.state}. Purchases are available only when Active.`);
   const available = Number(info.treasuryBalance) - (await reserved(seriesId));
-  if (tokens > available) throw new Error(`Token tersedia di treasury: ${Math.max(0, available).toLocaleString("id-ID")}`);
+  if (tokens > available) throw new Error(`Only ${Math.max(0, available).toLocaleString("en-US")} tokens are available in the treasury.`);
   const amount = tokens * Number(info.refPriceIdr);
-  if (funding === "balance" && (await balanceOf(me.userId)) < amount) throw new Error("Saldo tidak cukup untuk reinvest sebesar ini");
+  if (funding === "balance" && (await balanceOf(me.userId)) < amount) throw new Error("Insufficient balance for this reinvestment.");
   const { data: o, error } = await platformDb().from("orders").insert({
     series_id: seriesId, user_id: me.userId, wallet: me.wallet, tokens, amount_idr: amount, ref_price: Number(info.refPriceIdr), funding,
     deadline: new Date(Date.now() + ORDER_SECONDS * 1000).toISOString(),
@@ -57,16 +57,16 @@ export async function createOrder(me: { userId: string; wallet: string | null },
 export async function signOrder(me: { userId: string }, orderId: string, signature: Hex, returnBase: string) {
   const pf = platformDb();
   const { data: o } = await pf.from("orders").select("*").eq("id", orderId).eq("user_id", me.userId).maybeSingle();
-  if (!o) throw new Error("Pesanan tidak ditemukan");
-  if (o.status !== "AWAITING_SIGNATURE") throw new Error(`Pesanan berstatus ${ORDER_STATUS_LABEL[o.status]}`);
-  if (Date.parse(o.deadline) < Date.now()) { await setStatus(o.id, "EXPIRED"); throw new Error("Pesanan kedaluwarsa; buat ulang"); }
+  if (!o) throw new Error("Order not found.");
+  if (o.status !== "AWAITING_SIGNATURE") throw new Error(`Order status: ${ORDER_STATUS_LABEL[o.status]}`);
+  if (Date.parse(o.deadline) < Date.now()) { await setStatus(o.id, "EXPIRED"); throw new Error("Order expired. Create a new one."); }
   const ctx = await getSeries(o.series_id);
   const addr = needContract(ctx);
   const signer = await recoverTypedDataAddress({ domain: seriesDomain(addr), types: orderTypes, primaryType: "Order", message: orderMessage(o) as any, signature });
-  if (signer !== getAddress(o.wallet)) throw new Error("Tanda tangan bukan dari wallet Anda");
+  if (signer !== getAddress(o.wallet)) throw new Error("The signature does not match your wallet.");
 
   if (o.funding === "balance") {
-    if ((await balanceOf(me.userId)) < Number(o.amount_idr)) throw new Error("Saldo tidak cukup");
+    if ((await balanceOf(me.userId)) < Number(o.amount_idr)) throw new Error("Insufficient balance.");
     await pf.from("investor_ledger").insert({ user_id: me.userId, series_id: o.series_id, kind: "reinvest", amount: -Number(o.amount_idr), ref: `order:${o.id}` });
     await pf.from("orders").update({ signature, status: "PAID", paid_at: new Date().toISOString(), status_at: new Date().toISOString() }).eq("id", o.id);
     await moveCash(o.series_id, `reinvest-${o.id}`, [["distribution", -Number(o.amount_idr)], ["spv_capital", Number(o.amount_idr)]]);
@@ -84,7 +84,7 @@ export async function signOrder(me: { userId: string }, orderId: string, signatu
 export async function settleOrder(orderId: string): Promise<string> {
   const pf = platformDb();
   const { data: o } = await pf.from("orders").select("*").eq("id", orderId).maybeSingle();
-  if (!o) throw new Error("Pesanan tidak ditemukan");
+  if (!o) throw new Error("Order not found.");
   if (o.status === "AWAITING_PAYMENT" && o.psp_ref) {
     const st = await providerFor(o.psp_ref).status(o.psp_ref);
     if (st === "expired") { await setStatus(o.id, "EXPIRED", "AWAITING_PAYMENT"); return "EXPIRED"; }
@@ -137,11 +137,11 @@ async function allocate(orderId: string): Promise<string> {
 export async function cancelOrder(userId: string, orderId: string) {
   const pf = platformDb();
   const { data: o } = await pf.from("orders").select("*").eq("id", orderId).eq("user_id", userId).maybeSingle();
-  if (!o) throw new Error("Pesanan tidak ditemukan");
+  if (!o) throw new Error("Order not found.");
   if (o.status === "AWAITING_PAYMENT") {
-    if ((await settleOrder(o.id)) !== "AWAITING_PAYMENT") throw new Error("Pembayaran sudah diterima; pesanan tidak bisa dibatalkan");
+    if ((await settleOrder(o.id)) !== "AWAITING_PAYMENT") throw new Error("Payment was received. This order can no longer be cancelled.");
     await providerFor(o.psp_ref).expire(o.psp_ref);
-  } else if (o.status !== "AWAITING_SIGNATURE") throw new Error("Pesanan ini tidak bisa dibatalkan");
+  } else if (o.status !== "AWAITING_SIGNATURE") throw new Error("This order can no longer be cancelled.");
   await setStatus(o.id, "CANCELLED", o.status);
 }
 

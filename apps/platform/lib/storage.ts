@@ -37,14 +37,14 @@ export async function uploadDocument(venueId: string, kind: string, file: File) 
   if (file.size === 0) throw new Error(`File ${file.name} kosong`);
   if (file.size > MAX_FILE_BYTES) throw new Error(`File ${file.name} lebih dari 10 MB`);
   const type = kind === "sales_data" ? (sheetType(file) ?? file.type) : file.type;
-  if (kind === "sales_data" ? !SHEET_TYPES.includes(type) : !ALLOWED_TYPES.includes(type)) throw new Error(kind === "sales_data" ? `Format ${file.name} tidak didukung (CSV atau XLSX)` : `Format ${file.name} tidak didukung (PDF, PNG, JPG)`);
-  if (kind === "photo" && !IMAGE_TYPES.includes(file.type)) throw new Error(`Foto ${file.name} harus PNG atau JPG`);
+  if (kind === "sales_data" ? !SHEET_TYPES.includes(type) : !ALLOWED_TYPES.includes(type)) throw new Error(kind === "sales_data" ? `Unsupported format for ${file.name} · use CSV or XLSX.` : `Unsupported format for ${file.name} · use PDF, PNG, or JPG.`);
+  if (kind === "photo" && !IMAGE_TYPES.includes(file.type)) throw new Error(`Photo ${file.name} must be PNG or JPG.`);
   await ensureBucket();
   const buf = Buffer.from(await file.arrayBuffer());
   const sha256 = createHash("sha256").update(buf).digest("hex");
   const path = `${venueId}/${kind}-${sha256.slice(0, 8)}-${safe(file.name)}`;
   const { error } = await platformDb().storage.from(BUCKET).upload(path, buf, { contentType: type, upsert: true });
-  if (error) throw new Error(`Upload gagal: ${error.message}`);
+  if (error) throw new Error(`Upload failed: ${error.message}`);
   return { path, sha256, size: file.size };
 }
 

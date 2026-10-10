@@ -11,10 +11,10 @@ const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(
  */
 export async function POST(req: Request) {
   const expected = process.env.INTERNAL_API_TOKEN;
-  if (!expected) return NextResponse.json({ error: "INTERNAL_API_TOKEN belum diisi" }, { status: 503 });
-  if (!same(req.headers.get("x-internal-token") ?? "", expected)) return NextResponse.json({ error: "token tidak valid" }, { status: 401 });
+  if (!expected) return NextResponse.json({ error: "INTERNAL_API_TOKEN is not configured." }, { status: 503 });
+  if (!same(req.headers.get("x-internal-token") ?? "", expected)) return NextResponse.json({ error: "Invalid API token." }, { status: 401 });
   const { companyId } = (await req.json().catch(() => ({}))) as { companyId?: string };
-  if (!companyId) return NextResponse.json({ error: "companyId wajib" }, { status: 400 });
+  if (!companyId) return NextResponse.json({ error: "companyId is required." }, { status: 400 });
   after(async () => {
     const pf = platformDb();
     const { data: venues } = await pf.from("venues").select("id").eq("pos_company_id", companyId);

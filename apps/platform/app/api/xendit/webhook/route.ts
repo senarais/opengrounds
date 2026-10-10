@@ -11,7 +11,7 @@ const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(
 export async function POST(req: Request) {
   const expected = process.env.XENDIT_WEBHOOK_TOKEN;
   const got = req.headers.get("x-callback-token") ?? "";
-  if (!expected || !same(got, expected)) return NextResponse.json({ error: "token tidak valid" }, { status: 401 });
+  if (!expected || !same(got, expected)) return NextResponse.json({ error: "Invalid webhook token." }, { status: 401 });
   const body = (await req.json().catch(() => ({}))) as { id?: string };
   if (body.id) await onChargePaid(body.id).catch((e) => console.error("[xendit]", e?.message ?? e));
   return NextResponse.json({ ok: true });

@@ -20,9 +20,9 @@ export const isVerified = (k: { status: string } | null | undefined) => k?.statu
 
 /** Mock KYC (sandbox): hanya bila Didit tidak dikonfigurasi. Dilabeli di UI. */
 export async function mockKyc(userId: string, wallet: string | null, fullName: string) {
-  if (diditConfig().configured) throw new Error("KYC memakai Didit; mock tidak tersedia");
+  if (diditConfig().configured) throw new Error("KYC is configured through Didit; mock verification is unavailable.");
   const name = fullName.trim().replace(/\s+/g, " ");
-  if (name.length < 3) throw new Error("Nama lengkap minimal 3 karakter");
+  if (name.length < 3) throw new Error("Enter your full legal name.");
   await platformDb().from("kyc_records").upsert({ user_id: userId, wallet, status: "verified", full_name: name, provider: "mock", verified_at: new Date().toISOString(), updated_at: new Date().toISOString() });
   await audit(userId, "kyc.mock_verified", { entity: "kyc_records", entityId: userId });
 }
@@ -47,9 +47,9 @@ export async function startDiditKyc(userId: string, wallet: string | null, origi
     // A repeated provider response or concurrent request must not reassign a session.
     const { data: existing, error: existingError } = await db.from("kyc_sessions").select("user_id, url, state").eq("session_id", s.session_id).maybeSingle();
     if (existingError) throw new Error(existingError.message);
-    if (!existing || existing.user_id !== userId) throw new Error("Sesi verifikasi tidak cocok dengan akun Anda. Hubungi tim Open Grounds.");
+    if (!existing || existing.user_id !== userId) throw new Error("This verification session does not match your account. Contact Open Grounds support.");
     if (existing.state === "verified" || existing.state === "review") return `${base}/portfolio`;
-    if (existing.state !== "pending") throw new Error("Sesi verifikasi sebelumnya sudah berakhir. Hubungi tim untuk memulai sesi baru.");
+    if (existing.state !== "pending") throw new Error("The previous verification session ended. Contact support to start a new one.");
     return existing.url || s.url;
   }
   return s.url;
@@ -87,7 +87,7 @@ export async function syncDiditKyc(userId: string) {
 // ---------------------------------------------------------------- rekening bank (§3.6.3)
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
-/** Pencocokan nama pemilik rekening dengan nama KYC (mock: perbandingan teks; layanan cek nama bank belum terverifikasi). */
+/** Account-holder name match against KYC. Demo mode uses text matching; bank verification is not integrated. */
 export const namesMatch = (a: string, b: string) => norm(a) === norm(b);
 
 export async function activeBankAccount(userId: string) {
@@ -99,18 +99,18 @@ export async function activeBankAccount(userId: string) {
   return data;
 }
 
-/** Daftarkan/ganti rekening. Nama harus sama dengan nama KYC. Ganti rekening = cooling-off 48 jam (penarikan ditahan). */
+/** Add or replace a bank account. Holder name must match KYC; replacements trigger a 48-hour withdrawal hold. */
 export async function registerBankAccount(userId: string, a: { bank: string; accountNumber: string; holderName: string }) {
   const kyc = await kycOf(userId);
-  if (!isVerified(kyc)) throw new Error("Selesaikan KYC dulu");
-  if (!/^\d{6,20}$/.test(a.accountNumber)) throw new Error("Nomor rekening 6–20 digit");
-  if (a.bank.trim().length < 2) throw new Error("Nama bank wajib diisi");
+  if (!isVerified(kyc)) throw new Error("Complete identity verification first.");
+  if (!/^\d{6,20}$/.test(a.accountNumber)) throw new Error("Account number must contain 6–20 digits.");
+  if (a.bank.trim().length < 2) throw new Error("Enter a bank name.");
   const match = kyc!.full_name ? namesMatch(a.holderName, kyc!.full_name) : false;
   const pf = platformDb();
   const prev = await activeBankAccount(userId);
   if (!match) {
     await pf.from("investor_bank_accounts").insert({ user_id: userId, bank: a.bank.trim(), account_masked: maskNumber(a.accountNumber), account_hash: sha(a.accountNumber), holder_name: a.holderName.trim(), name_matches: false, status: "rejected" });
-    throw new Error(kyc!.full_name ? "Nama pemilik rekening tidak sama dengan nama KYC. Rekening harus atas nama Anda sendiri." : "Nama KYC tidak tersedia dari penyedia; hubungi tim.");
+    throw new Error(kyc!.full_name ? "The account holder name does not match KYC. Use an account in your own name." : "Your verified KYC name is unavailable. Contact support.");
   }
   const cooling = !!prev;
   if (prev) await pf.from("investor_bank_accounts").update({ status: "replaced" }).eq("id", prev.id);
@@ -119,15 +119,15 @@ export async function registerBankAccount(userId: string, a: { bank: string; acc
     status: cooling ? "cooling_off" : "verified", cooling_until: cooling ? new Date(Date.now() + DEMO_PARAMS.bankCoolingHours * 3_600_000).toISOString() : null,
   });
   await audit(userId, cooling ? "bank.replace" : "bank.register", { entity: "investor_bank_accounts", entityId: userId, after: { bank: a.bank, masked: maskNumber(a.accountNumber) } });
-  return cooling ? `Rekening diganti. Penarikan ditahan ${DEMO_PARAMS.bankCoolingHours} jam (masa tunggu keamanan).` : "Rekening terverifikasi (nama cocok dengan KYC).";
+  return cooling ? `Bank account updated. Withdrawals are paused for ${DEMO_PARAMS.bankCoolingHours} hours as a security hold.` : "Bank account verified. Name matches KYC.";
 }
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-/** Syarat sebelum membeli: wallet, KYC, rekening terverifikasi. Lempar Error dengan langkah yang kurang. */
+/** Enforce wallet, KYC, and verified bank-account requirements before buying. */
 export async function assertCanBuy(me: { userId: string; wallet: string | null }) {
-  if (!me.wallet) throw new Error("Wallet Anda belum siap. Tunggu sebentar di halaman Portofolio.");
-  if (!isVerified(await kycOf(me.userId))) throw new Error("Selesaikan KYC di halaman Portofolio dulu.");
-  if (!(await activeBankAccount(me.userId))) throw new Error("Daftarkan rekening bank atas nama Anda di halaman Portofolio dulu.");
+  if (!me.wallet) throw new Error("Your wallet is not ready yet. Wait a moment, then refresh your portfolio.");
+  if (!isVerified(await kycOf(me.userId))) throw new Error("Complete identity verification in your portfolio first.");
+  if (!(await activeBankAccount(me.userId))) throw new Error("Add a bank account in your portfolio before buying.");
 }
 
 /** Allowlist on-chain (isVerified) untuk wallet investor di satu seri. Idempoten. */

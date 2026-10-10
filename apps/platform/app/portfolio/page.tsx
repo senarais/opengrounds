@@ -4,6 +4,7 @@ import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader } from "@venue-rwa/u
 import { SellBackBox, WalletStatus } from "@/components/Wallet";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Statements } from "@/components/Statements";
+import { SpotlightPanel } from "@/components/SpotlightPanel";
 import { requireInvestor } from "@/lib/auth";
 import { readHolder, readSeries, etherscanTx } from "@/lib/chain";
 import { diditConfig } from "@/lib/didit";
@@ -16,7 +17,7 @@ import { date, dt, rp } from "@/lib/format";
 import { cancelOrderAction, cancelSellBackAction, mockKycAction, saveBankAction, startKycAction, withdrawAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Portofolio" };
+export const metadata = { title: "Investor portfolio · Open Grounds" };
 
 export default async function Portfolio({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; kyc?: string }> }) {
   const sp = await searchParams;
@@ -44,103 +45,103 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
   return (
     <div className="container">
       <AutoRefresh seconds={15} />
-      <PageHeader eyebrow="Investor" title="Portofolio" lead="Token Anda, saldo hasil jatah, dan status pesanan." />
+      <PageHeader eyebrow="Investor" title="Your portfolio" lead="Track your tokens, available balance, and orders." />
       <Flash ok={sp.ok} err={sp.err} />
-      {syncErrs.length > 0 && <Notice tone="warn" title="Sebagian pesanan belum selesai diproses:">{syncErrs[0]}</Notice>}
+      {syncErrs.length > 0 && <Notice tone="warn" title="Some orders could not be synced:">{syncErrs[0]}</Notice>}
 
       <div className="grid c3">
-        <Card title="1. Wallet" subtitle="Dibuat otomatis, kuncinya disimpan Privy">
-          {me.wallet ? <><span className="mono small">{me.wallet}</span><div className="small muted">Tanpa biaya gas untuk Anda. Platform yang mengirim transaksi.</div></> : <WalletStatus />}
+        <Card title="Wallet" subtitle="Created and secured by Privy">
+          {me.wallet ? <><span className="mono small">{me.wallet}</span><div className="small muted">No gas required from you. The platform submits transactions.</div></> : <WalletStatus />}
         </Card>
-        <Card title="2. KYC" subtitle={live ? "Didit" : "Mock berlabel sandbox (Didit belum dikonfigurasi)"}>
-          {kycOk ? <Badge tone="ok">Terverifikasi{kyc?.provider === "mock" ? " (mock)" : ""}</Badge> : kyc?.status === "rejected" ? <Badge tone="bad">Ditolak</Badge> : live ? (
-            <form action={startKycAction}><button className="btn primary" disabled={!me.wallet}>Mulai verifikasi identitas</button><p className="small muted" style={{ marginTop: 6 }}>KTP dan selfie diproses Didit; platform hanya menerima status dan nama.</p></form>
+        <Card title="Identity check" subtitle={live ? "Didit verification" : "Sandbox simulation · Didit is not configured"}>
+          {kycOk ? <Badge tone="ok">Verified{kyc?.provider === "mock" ? " · mock" : ""}</Badge> : kyc?.status === "rejected" ? <Badge tone="bad">Declined</Badge> : live ? (
+            <form action={startKycAction}><button className="btn primary" disabled={!me.wallet}>Start identity check</button><p className="small muted" style={{ marginTop: 6 }}>Didit processes identity documents; the platform receives your status and name.</p></form>
           ) : (
             <form action={mockKycAction} className="stack" style={{ ["--gap" as any]: "8px" }}>
-              <label className="field">Nama lengkap sesuai KTP<input className="input" name="name" required minLength={3} defaultValue={me.name} /></label>
-              <button className="btn primary" disabled={!me.wallet}>Verifikasi (mock)</button>
-              <p className="small muted">Ini simulasi. Tidak ada identitas yang diperiksa.</p>
+              <label className="field">Full legal name<input className="input" name="name" required minLength={3} defaultValue={me.name} /></label>
+              <button className="btn primary" disabled={!me.wallet}>Complete mock check</button>
+              <p className="small muted">Simulation only. No identity documents are checked.</p>
             </form>
           )}
         </Card>
-        <Card title="3. Rekening bank" subtitle="Atas nama sendiri; nama harus sama dengan KYC">
-          {bank ? <div className="small"><b>{bank.bank}</b> {bank.account_masked}<div className="muted">a.n. {bank.holder_name}</div>{bank.status === "cooling_off" && <Badge tone="warn">Masa tunggu sampai {dt(bank.cooling_until)}</Badge>}</div> : null}
+        <Card title="Bank account" subtitle="Must be in your own name and match KYC">
+          {bank ? <div className="small"><b>{bank.bank}</b> {bank.account_masked}<div className="muted">Account holder · {bank.holder_name}</div>{bank.status === "cooling_off" && <Badge tone="warn">Security hold until {dt(bank.cooling_until)}</Badge>}</div> : null}
           {kycOk ? (
-            <details style={{ marginTop: 8 }} open={!bank}><summary className="small" style={{ cursor: "pointer", fontWeight: 600 }}>{bank ? "Ganti rekening (tunggu 48 jam)" : "Daftarkan rekening"}</summary>
+            <details style={{ marginTop: 8 }} open={!bank}><summary className="small" style={{ cursor: "pointer", fontWeight: 600 }}>{bank ? "Replace account · 48-hour hold" : "Add bank account"}</summary>
               <form action={saveBankAction} className="stack" style={{ ["--gap" as any]: "8px", marginTop: 8 }}>
-                <input className="input" name="bank" placeholder="Bank (mis. BCA)" required />
-                <input className="input" name="number" placeholder="Nomor rekening" required inputMode="numeric" />
-                <input className="input" name="holder" placeholder="Nama pemilik rekening" required />
-                <button className="btn">Simpan</button>
-                <p className="small muted">Pencocokan nama otomatis adalah mock; layanan cek nama bank belum terverifikasi.</p>
+                <input className="input" name="bank" placeholder="Bank name" required aria-label="Bank name" />
+                <input className="input" name="number" placeholder="Account number" required inputMode="numeric" aria-label="Account number" />
+                <input className="input" name="holder" placeholder="Account holder name" required aria-label="Account holder name" />
+                <button className="btn">Save account</button>
+                <p className="small muted">Name matching is simulated; bank verification is not yet integrated.</p>
               </form>
             </details>
-          ) : <p className="small muted">Selesaikan KYC dulu.</p>}
+          ) : <p className="small muted">Complete the identity check first.</p>}
         </Card>
       </div>
 
       <div className="grid c3 mt">
-        <Kpi label="Saldo (hasil jatah)" value={rp(balance)} hint="milik Anda, di rekening distribusi (simulasi)" accent />
-        <Kpi label="Token dimiliki" value={holdings.reduce((a, x) => a + Number(x.h.balance), 0).toLocaleString("id-ID")} />
-        <Kpi label="Jatah kumulatif" value={rp(holdings.reduce((a, x) => a + Number(x.h.claimable), 0))} hint="hitungan kontrak, termasuk yang belum dikreditkan" />
+        <Kpi label="Available balance" value={rp(balance)} hint="Your distribution account · simulated" accent />
+        <Kpi label="Tokens held" value={holdings.reduce((a, x) => a + Number(x.h.balance), 0).toLocaleString("en-US")} />
+        <Kpi label="Accrued distributions" value={rp(holdings.reduce((a, x) => a + Number(x.h.claimable), 0))} hint="Contract calculation; may not yet be credited" />
       </div>
 
-      <div className="section-title mt"><h2>Token saya</h2><Link className="small" href="/products">Cari produk</Link></div>
-      {holdings.length === 0 ? <Empty>Belum ada token. <Link href="/products" style={{ fontWeight: 700 }}>Lihat produk</Link></Empty> : holdings.map(({ s, info, h }) => (
-        <Card key={s.id} title={<><Link href={`/products/${s.id}`}>{s.venues?.name}</Link> · {s.symbol}</>} subtitle={`${info.state} · harga referensi ${rp(Number(info.refPriceIdr))}`}>
+      <div className="section-title mt"><h2>Your tokens</h2><Link className="small" href="/products">Explore venues</Link></div>
+      {holdings.length === 0 ? <Empty>You don’t hold any tokens yet. <Link href="/products" style={{ fontWeight: 700 }}>Explore venues</Link></Empty> : holdings.map(({ s, info, h }) => (
+        <SpotlightPanel key={s.id} className="og-portfolio-holding"><div className="card-head"><div><h2><Link href={`/products/${s.id}`}>{s.venues?.name}</Link> · {s.symbol}</h2><p>{info.state} · reference price {rp(Number(info.refPriceIdr))}</p></div></div>
           <div className="grid c2">
             <div>
-              <div className="big-amount">{Number(h.balance).toLocaleString("id-ID")} <span className="small muted">token ({(Number(h.balance) / Number(info.supply) * 100).toFixed(2)}% dari supply)</span></div>
-              <div className="small muted">Dibayar (harga referensi saat ini): {rp(Number(h.balance) * Number(info.refPriceIdr))}. Nilai tebus dan harga pasar tidak dijanjikan.</div>
+              <div className="big-amount">{Number(h.balance).toLocaleString("en-US")} <span className="small muted">tokens · {(Number(h.balance) / Number(info.supply) * 100).toFixed(2)}% of supply</span></div>
+              <div className="small muted">At current reference price: {rp(Number(h.balance) * Number(info.refPriceIdr))}. No redemption or market price is promised.</div>
               <div className="lots" style={{ marginTop: 10 }}>{h.lots.map((l, i) => {
                 const open = l.unlockAt * 1000 <= Date.now();
-                return <div className="lot" key={i}><b>{Number(l.amount).toLocaleString("id-ID")}</b><span className="small muted">{open ? "bisa dijual balik" : `terbuka ${dt(new Date(l.unlockAt * 1000).toISOString())}`}</span><span className={`lock ${open ? "open" : ""}`}>{open ? "terbuka" : "terkunci"}</span></div>;
+                return <div className="lot" key={i}><b>{Number(l.amount).toLocaleString("en-US")}</b><span className="small muted">{open ? "eligible for sell-back" : `unlocks ${dt(new Date(l.unlockAt * 1000).toISOString())}`}</span><span className={`lock ${open ? "open" : ""}`}>{open ? "Unlocked" : "Locked"}</span></div>;
               })}</div>
             </div>
             <div>
-              <h3>Jual balik ke treasury</h3>
-              {info.state === "Active" ? <SellBackBox seriesId={s.id} unlocked={Number(h.unlocked)} price={Number(info.refPriceIdr) * (10_000 - info.params.sellbackDiscountBps) / 10_000} /> : <p className="small muted">Tidak tersedia saat seri {info.state}.</p>}
+              <h3>Sell back to treasury</h3>
+              {info.state === "Active" ? <SellBackBox seriesId={s.id} unlocked={Number(h.unlocked)} price={Number(info.refPriceIdr) * (10_000 - info.params.sellbackDiscountBps) / 10_000} /> : <p className="small muted">Unavailable while the series is {info.state}.</p>}
             </div>
           </div>
-        </Card>
+        </SpotlightPanel>
       ))}
 
-      <Card title="Bagaimana laba menjadi saldo Anda?" className="mt">
+      <Card title="How distributions become your balance" className="mt">
         <ol className="small" style={{ paddingLeft: 20, lineHeight: 1.8 }}>
-          <li>Pelanggan membayar booking lewat gateway. Penjualan PoS belum langsung menjadi saldo investor.</li>
-          <li>Di akhir periode, pendapatan dikurangi refund, biaya, pajak, dan cadangan. Platform dan owner menyetujui laporan laba.</li>
-          <li>Setelah dana distribusi tersedia, jatah berdasarkan token Anda dikreditkan ke saldo. Token treasury juga mendapat bagiannya, jadi seluruh pool bukan milik investor yang sudah membeli.</li>
-          <li><b>Tarik:</b> kirim saldo ke rekening terverifikasi, minimal Rp10.000. <b>Reinvest:</b> buka produk, pilih “Reinvest dari saldo”, lalu tanda tangani pembelian token baru. Lot baru punya masa kunci.</li>
+          <li>Customers pay booking fees through the payment gateway. PoS sales are not immediately investor balances.</li>
+          <li>At period close, refunds, expenses, tax, and reserves are deducted. The platform and owner approve the profit report.</li>
+          <li>Once distribution funds are available, your token-based share is credited. Grounds-held treasury tokens receive their share too.</li>
+          <li><b>Withdraw:</b> send funds to your verified bank account · Rp10,000 minimum. <b>Reinvest:</b> sign a new token order using your balance. New tokens have a lock period.</li>
         </ol>
-        <p className="small muted">Harga referensi token dan saldo laba adalah dua hal berbeda. Laba tidak otomatis menaikkan harga token. Demo ini memakai rupiah simulasi.</p>
-        <Link href="/products" className="btn sm">Pilih produk untuk reinvest</Link>
+        <p className="small muted">Token reference prices and your distribution balance are separate. Profit does not automatically increase token prices. Rupiah is simulated in this demo.</p>
+        <Link href="/products" className="btn sm">Choose a venue to reinvest</Link>
       </Card>
       <div className="grid c2 mt">
-        <Card title="Tarik saldo" subtitle="Hanya ke rekening terdaftar atas nama Anda">
+        <Card title="Withdraw balance" subtitle="Only to your verified bank account">
           {bankOk && balance >= 10_000 ? (
             <form action={withdrawAction} className="row">
-              <input className="input" name="amount" type="number" min={10000} max={balance} defaultValue={balance} aria-label="Nominal penarikan" />
-              <button className="btn primary">Tarik</button>
+              <input className="input" name="amount" type="number" min={10000} max={balance} defaultValue={balance} aria-label="Withdrawal amount" />
+              <button className="btn primary">Request withdrawal</button>
             </form>
-          ) : <p className="small muted">{bank?.status === "cooling_off" ? "Penarikan ditahan selama masa tunggu ganti rekening." : !bank ? "Daftarkan rekening dulu." : "Saldo belum cukup (minimal Rp10.000)."}</p>}
-          <p className="small muted" style={{ marginTop: 8 }}>Saldo juga bisa dipakai membeli token (reinvest) di halaman produk. Tidak ada auto-reinvest.</p>
+          ) : <p className="small muted">{bank?.status === "cooling_off" ? "Withdrawals are paused during the bank-account security hold." : !bank ? "Add a verified bank account first." : "Balance is below the Rp10,000 minimum."}</p>}
+          <p className="small muted" style={{ marginTop: 8 }}>You can also use this balance to buy tokens. Reinvestment is never automatic.</p>
           {wds.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{wds.slice(0, 5).map((w) => <tr key={w.id}><td>{date(w.created_at)}</td><td>{rp(Number(w.amount))}</td><td><Badge tone={w.status === "Settled" ? "ok" : w.status === "Failed" ? "bad" : "info"}>{WITHDRAW_STATUS_LABEL[w.status]}</Badge></td></tr>)}</tbody></table>}
         </Card>
-        <Card title="Riwayat saldo" subtitle="Append-only; koreksi lewat entri pembalik">
-          {ledger.length === 0 ? <p className="small muted">Belum ada.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Jatah periode " + (l.period_no ?? ""), withdrawal: "Penarikan", withdrawal_reversal: "Penarikan gagal (dikembalikan)", reinvest: "Reinvest", sellback: "Jual balik", adjustment: "Penyesuaian" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
+        <Card title="Balance history" subtitle="Append-only ledger; corrections use reversing entries">
+          {ledger.length === 0 ? <p className="small muted">No balance activity yet.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Period distribution " + (l.period_no ?? ""), withdrawal: "Withdrawal", withdrawal_reversal: "Failed withdrawal · returned", reinvest: "Reinvestment", sellback: "Sell-back", adjustment: "Adjustment" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
         </Card>
       </div>
 
-      <div className="section-title mt"><h2>Pesanan</h2></div>
+      <div className="section-title mt"><h2>Orders</h2></div>
       <Card>
-        {(orders ?? []).length === 0 ? <p className="small muted">Belum ada pesanan.</p> : <table className="table small"><thead><tr><th>Tanggal</th><th>Seri</th><th>Token</th><th>Dibayar</th><th>Status</th><th /></tr></thead><tbody>{(orders ?? []).map((o: any) => (
+        {(orders ?? []).length === 0 ? <p className="small muted">No orders yet.</p> : <table className="table small"><thead><tr><th>Date</th><th>Series</th><th>Tokens</th><th>Amount paid</th><th>Status</th><th /></tr></thead><tbody>{(orders ?? []).map((o: any) => (
           <tr key={o.id}>
-            <td>{dt(o.created_at)}</td><td>{o.series?.symbol}</td><td>{Number(o.tokens).toLocaleString("id-ID")}</td><td>{rp(Number(o.amount_idr))}{o.funding === "balance" ? " (saldo)" : ""}</td>
+            <td>{dt(o.created_at)}</td><td>{o.series?.symbol}</td><td>{Number(o.tokens).toLocaleString("en-US")}</td><td>{rp(Number(o.amount_idr))}{o.funding === "balance" ? " · balance" : ""}</td>
             <td><Badge tone={o.status === "ALLOCATED" ? "ok" : ["FAILED", "CANCELLED", "EXPIRED"].includes(o.status) ? "bad" : "info"}>{ORDER_STATUS_LABEL[o.status]}</Badge>{o.note && <div className="small muted">{o.note}</div>}</td>
-            <td>{o.status === "AWAITING_PAYMENT" && o.psp_url && <a className="btn sm primary" href={o.psp_url}>Bayar</a>} {["AWAITING_PAYMENT", "AWAITING_SIGNATURE"].includes(o.status) && <form action={cancelOrderAction} style={{ display: "inline" }}><input type="hidden" name="id" value={o.id} /><button className="btn sm ghost">Batalkan</button></form>}{o.allocated_tx && <a className="small" href={etherscanTx(o.allocated_tx)} target="_blank" rel="noreferrer">tx ↗</a>}</td>
+            <td>{o.status === "AWAITING_PAYMENT" && o.psp_url && <a className="btn sm primary" href={o.psp_url}>Pay</a>} {["AWAITING_PAYMENT", "AWAITING_SIGNATURE"].includes(o.status) && <form action={cancelOrderAction} style={{ display: "inline" }}><input type="hidden" name="id" value={o.id} /><button className="btn sm ghost">Cancel</button></form>}{o.allocated_tx && <a className="small" href={etherscanTx(o.allocated_tx)} target="_blank" rel="noreferrer">Transaction ↗</a>}</td>
           </tr>))}</tbody></table>}
       </Card>
-      {(sbs ?? []).length > 0 && <Card title="Pengajuan jual balik" className="mt"><table className="table small"><tbody>{(sbs ?? []).map((r) => <tr key={r.id}><td>{dt(r.created_at)}</td><td>{Number(r.tokens).toLocaleString("id-ID")} token</td><td>{rp(Number(r.amount_idr))}</td><td><Badge tone={r.status === "Executed" ? "ok" : r.status === "Queued" ? "info" : "neutral"}>{SELLBACK_STATUS_LABEL[r.status]}</Badge></td><td>{["Queued", "AwaitingSignature"].includes(r.status) && canSignOut && <form action={cancelSellBackAction}><input type="hidden" name="id" value={r.id} /><button className="btn sm ghost">Batalkan</button></form>}</td></tr>)}</tbody></table></Card>}
+      {(sbs ?? []).length > 0 && <Card title="Sell-back requests" className="mt"><table className="table small"><tbody>{(sbs ?? []).map((r) => <tr key={r.id}><td>{dt(r.created_at)}</td><td>{Number(r.tokens).toLocaleString("en-US")} tokens</td><td>{rp(Number(r.amount_idr))}</td><td><Badge tone={r.status === "Executed" ? "ok" : r.status === "Queued" ? "info" : "neutral"}>{SELLBACK_STATUS_LABEL[r.status]}</Badge></td><td>{["Queued", "AwaitingSignature"].includes(r.status) && canSignOut && <form action={cancelSellBackAction}><input type="hidden" name="id" value={r.id} /><button className="btn sm ghost">Cancel</button></form>}</td></tr>)}</tbody></table></Card>}
       <div className="mt"><Statements /></div>
     </div>
   );

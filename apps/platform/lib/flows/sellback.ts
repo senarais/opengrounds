@@ -11,24 +11,24 @@ import { activeBankAccount, isVerified, kycOf } from "./investor";
  * Jual balik ke treasury (§3.7, §4.8): tidak dijamin. Hanya lot yang sudah terbuka, seri Active, harga p_ref × (1 − d),
  * dari cadangan buyback, dieksekusi per jendela secara FIFO. Investor tidak perlu mencari pembeli.
  */
-export const SELLBACK_STATUS_LABEL: Record<string, string> = { AwaitingSignature: "Menunggu tanda tangan", Queued: "Dalam antrean", Executed: "Terlaksana", Cancelled: "Dibatalkan", Expired: "Kedaluwarsa", Failed: "Gagal" };
+export const SELLBACK_STATUS_LABEL: Record<string, string> = { AwaitingSignature: "Awaiting signature", Queued: "Queued", Executed: "Completed", Cancelled: "Cancelled", Expired: "Expired", Failed: "Failed" };
 const REQUEST_DAYS = 30;
 
 export const sellBackMessage = (r: any): SellBackMessage => ({ holder: getAddress(r.wallet), tokens: BigInt(r.tokens), paidIdr: BigInt(r.amount_idr), requestId: BigInt(r.request_no), deadline: BigInt(Math.floor(Date.parse(r.deadline) / 1000)) });
 
 export async function requestSellBack(me: { userId: string; wallet: string | null }, seriesId: string, tokens: number) {
-  if (!me.wallet) throw new Error("Wallet belum siap");
-  if (!isVerified(await kycOf(me.userId))) throw new Error("KYC tidak aktif");
-  if (!(await activeBankAccount(me.userId))) throw new Error("Rekening bank belum terdaftar");
-  if (!Number.isInteger(tokens) || tokens < 1) throw new Error("Jumlah token minimal 1");
+  if (!me.wallet) throw new Error("Your wallet is not ready.");
+  if (!isVerified(await kycOf(me.userId))) throw new Error("Identity verification is required.");
+  if (!(await activeBankAccount(me.userId))) throw new Error("A verified bank account is required.");
+  if (!Number.isInteger(tokens) || tokens < 1) throw new Error("Enter at least one token.");
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const info = await readSeries(addr);
-  if (info.state !== "Active") throw new Error(`Jual balik tidak berlaku saat seri ${info.state}`);
+  if (info.state !== "Active") throw new Error(`Sell-back is unavailable while the series is ${info.state}.`);
   const h = await readHolder(addr, info.token, getAddress(me.wallet));
   const { data: queued } = await platformDb().from("sellback_requests").select("tokens").eq("user_id", me.userId).eq("series_id", seriesId).in("status", ["AwaitingSignature", "Queued"]);
   const pending = (queued ?? []).reduce((a, r) => a + Number(r.tokens), 0);
-  if (tokens + pending > Number(h.unlocked)) throw new Error(`Token yang sudah lewat masa kunci dan belum diajukan: ${Math.max(0, Number(h.unlocked) - pending)}`);
+  if (tokens + pending > Number(h.unlocked)) throw new Error(`Only ${Math.max(0, Number(h.unlocked) - pending)} unlocked tokens are available.`);
   const amount = sellbackAmount(tokens, Number(info.refPriceIdr), info.params.sellbackDiscountBps);
   const { data: r, error } = await platformDb().from("sellback_requests").insert({
     series_id: seriesId, user_id: me.userId, wallet: getAddress(me.wallet), tokens, amount_idr: amount, deadline: new Date(Date.now() + REQUEST_DAYS * 86_400_000).toISOString(),
@@ -40,24 +40,24 @@ export async function requestSellBack(me: { userId: string; wallet: string | nul
 export async function signSellBack(me: { userId: string }, id: string, signature: Hex) {
   const pf = platformDb();
   const { data: r } = await pf.from("sellback_requests").select("*").eq("id", id).eq("user_id", me.userId).maybeSingle();
-  if (!r || r.status !== "AwaitingSignature") throw new Error("Permintaan tidak ditemukan atau sudah ditandatangani");
+  if (!r || r.status !== "AwaitingSignature") throw new Error("Sell-back request not found or already signed.");
   const addr = needContract(await getSeries(r.series_id));
   const signer = await recoverTypedDataAddress({ domain: seriesDomain(addr), types: sellBackTypes, primaryType: "SellBack", message: sellBackMessage(r) as any, signature });
-  if (signer !== getAddress(r.wallet)) throw new Error("Tanda tangan bukan dari wallet Anda");
+  if (signer !== getAddress(r.wallet)) throw new Error("The signature does not match your wallet.");
   await pf.from("sellback_requests").update({ signature, status: "Queued" }).eq("id", id);
   await audit(me.userId, "sellback.request", { entity: "sellback_requests", entityId: id, after: { tokens: r.tokens, amount: r.amount_idr } });
-  return "Pengajuan masuk antrean jendela jual balik berikutnya. Tidak dijamin terlaksana.";
+  return "Request queued for the next buyback window. Execution is not guaranteed.";
 }
 
 export async function cancelSellBack(userId: string, id: string) {
   const { data } = await platformDb().from("sellback_requests").update({ status: "Cancelled" }).eq("id", id).eq("user_id", userId).in("status", ["AwaitingSignature", "Queued"]).select("id");
-  if (!data?.length) throw new Error("Permintaan tidak bisa dibatalkan");
+  if (!data?.length) throw new Error("This sell-back request can no longer be cancelled.");
 }
 
 /** Operator mengisi cadangan buyback dari modal SPV (simulasi). */
 export async function fundBuybackReserve(seriesId: string, amount: number, actor: string) {
-  if (!Number.isInteger(amount) || amount <= 0) throw new Error("Nominal tidak valid");
-  if ((await cashBalance(seriesId, "spv_capital")) < amount) throw new Error("Modal SPV (simulasi) tidak cukup");
+  if (!Number.isInteger(amount) || amount <= 0) throw new Error("Enter a positive whole-rupiah amount.");
+  if ((await cashBalance(seriesId, "spv_capital")) < amount) throw new Error("Insufficient simulated SPV capital.");
   await moveCash(seriesId, `buyback-fund-${seriesId}-${Date.now()}`, [["spv_capital", -amount], ["buyback_reserve", amount]]);
   await audit(actor, "buyback.fund", { entity: "series", entityId: seriesId, after: { amount } });
 }
@@ -86,7 +86,7 @@ export async function runSellBackWindow(seriesId: string, actor: string) {
   }
   await audit(actor, "sellback.window", { entity: "series", entityId: seriesId, after: { executed: done, paid } });
   const left = (queue ?? []).length - done;
-  return `Jendela jual balik: ${done} terlaksana (Rp${paid.toLocaleString("id-ID")}); ${left > 0 ? `${left} masih mengantre` : "antrean kosong"}.`;
+  return `Buyback window complete: ${done} executed (Rp${paid.toLocaleString("en-US")}); ${left > 0 ? `${left} remain queued` : "queue empty"}.`;
 }
 
 export type { Address };

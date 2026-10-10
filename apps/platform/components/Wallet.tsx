@@ -69,7 +69,7 @@ export function BuyBox({ seriesId, refPrice, available, balance, gateway }: { se
   }
   return (
     <div className="stack" style={{ ["--gap" as any]: "12px" }}>
-      <div className="seg" role="radiogroup" aria-label="Payment method">
+      <div className="seg" role="group" aria-label="Payment method">
         <button type="button" className={funding === "payment" ? "on" : ""} aria-pressed={funding === "payment"} onClick={() => setFunding("payment")}>Pay · {gateway === "xendit" ? "Xendit test" : "sandbox"}</button>
         <button type="button" className={funding === "balance" ? "on" : ""} aria-pressed={funding === "balance"} onClick={() => setFunding("balance")} disabled={balance < refPrice}>Reinvest balance</button>
       </div>

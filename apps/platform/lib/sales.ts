@@ -13,10 +13,10 @@ const cell = (v: unknown): string => {
 
 /** Baca file CSV atau XLSX menjadi tabel sel. */
 export async function tableFromFile(file: File): Promise<string[][]> {
-  if (file.size === 0) throw new Error("File data penjualan kosong");
-  if (file.size > MAX_SALES_FILE_BYTES) throw new Error("File data penjualan maksimal 5 MB");
+  if (file.size === 0) throw new Error("Sales data file is empty.");
+  if (file.size > MAX_SALES_FILE_BYTES) throw new Error("Sales data file must be 5 MB or smaller.");
   const type = sheetType(file);
-  if (!type) throw new Error("Format harus CSV atau XLSX");
+  if (!type) throw new Error("Sales data must be a CSV or XLSX file.");
   if (type === "text/csv") return parseCsv(await file.text());
   const rows = await readXlsxFile(Buffer.from(await file.arrayBuffer()));
   return rows.map((r) => r.map(cell));

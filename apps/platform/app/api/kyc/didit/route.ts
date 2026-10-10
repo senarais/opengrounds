@@ -7,7 +7,7 @@ import { applyDiditStatus } from "@/lib/flows/investor";
 export async function POST(req: Request) {
   const raw = await req.text();
   const ok = await verifyDiditWebhook({ rawBody: raw, signature: req.headers.get("x-signature-v2"), timestamp: req.headers.get("x-timestamp"), secret: diditConfig().webhookSecret });
-  if (!ok) return NextResponse.json({ error: "tanda tangan tidak valid" }, { status: 401 });
+  if (!ok) return NextResponse.json({ error: "Invalid webhook signature." }, { status: 401 });
   const b = JSON.parse(raw) as { session_id?: string; status?: string; event_id?: string; decision?: any };
   const idv = b.decision?.id_verification ?? {};
   const name = idv.full_name ?? ([idv.first_name, idv.last_name].filter(Boolean).join(" ") || null);

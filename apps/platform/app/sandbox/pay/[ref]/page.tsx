@@ -6,6 +6,7 @@ import { payMockCharge, signMockWebhook } from "@/lib/psp";
 import { rp } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Sandbox checkout · Open Grounds" };
 
 async function pay(fd: FormData) {
   "use server";
@@ -27,14 +28,14 @@ export default async function SandboxPay({ params, searchParams }: { params: Pro
   const { data } = await platformDb().from("mock_charges").select("*").eq("ref", ref).maybeSingle();
   return (
     <div className="container" style={{ maxWidth: 520 }}>
-      <SimBanner>SANDBOX · bukan pembayaran sungguhan</SimBanner>
-      <Card title="Halaman bayar sandbox" subtitle="MockPaymentProvider: webhook bertanda tangan, format sama seperti penyedia asli">
-        {!data ? <Notice tone="bad">Tagihan tidak ditemukan.</Notice> : data.status === "paid" ? <Notice tone="ok">Sudah dibayar.</Notice> : (
+      <SimBanner>SANDBOX · no real payment</SimBanner>
+      <Card title="Sandbox checkout" subtitle="Mock payment provider · signed test webhook">
+        {!data ? <Notice tone="bad">Payment request not found.</Notice> : data.status === "paid" ? <Notice tone="ok">Payment received.</Notice> : (
           <form action={pay} className="stack">
             <div className="big-amount">{rp(Number(data.amount))}</div>
             <p className="small">{data.description}</p>
             <input type="hidden" name="ref" value={ref} /><input type="hidden" name="back" value={sp.back ?? "/"} />
-            <button className="btn primary lg">Bayar (simulasi)</button>
+            <button className="btn primary lg">Complete simulated payment</button>
           </form>
         )}
       </Card>

@@ -7,7 +7,7 @@ import { activeBankAccount } from "./investor";
  * Penarikan: Requested → Screened (AML, mock) → Sent → Settled, atau Failed (saldo kembali lewat entri pembalik).
  * Gagal di sisi investor tidak pernah membuat seri Overdue.
  */
-export const WITHDRAW_STATUS_LABEL: Record<string, string> = { Requested: "Diajukan", Screened: "Lolos pemeriksaan", Sent: "Dikirim ke bank", Settled: "Sampai di rekening", Failed: "Gagal (saldo dikembalikan)" };
+export const WITHDRAW_STATUS_LABEL: Record<string, string> = { Requested: "Requested", Screened: "Screened", Sent: "Sent to bank", Settled: "Settled", Failed: "Failed · balance returned" };
 
 export async function balanceOf(userId: string): Promise<number> {
   const { data } = await platformDb().from("investor_ledger").select("amount").eq("user_id", userId);
@@ -26,11 +26,11 @@ export async function withdrawalsOf(userId: string) {
 
 /** Ajukan penarikan ke rekening terdaftar. Saldo langsung didebit (dana ditahan selama proses). */
 export async function requestWithdrawal(userId: string, amount: number) {
-  if (!Number.isInteger(amount) || amount < 10_000) throw new Error("Minimal penarikan Rp10.000");
+  if (!Number.isInteger(amount) || amount < 10_000) throw new Error("Minimum withdrawal is Rp10,000.");
   const bank = await activeBankAccount(userId);
-  if (!bank) throw new Error("Daftarkan rekening bank atas nama Anda dulu");
-  if (bank.status === "cooling_off") throw new Error(`Rekening baru diganti; penarikan dibuka ${new Date(bank.cooling_until).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`);
-  if ((await balanceOf(userId)) < amount) throw new Error("Saldo tidak cukup");
+  if (!bank) throw new Error("Add a verified bank account in your own name first.");
+  if (bank.status === "cooling_off") throw new Error(`Bank account security hold ends ${new Date(bank.cooling_until).toLocaleString("en-GB", { timeZone: "Asia/Jakarta" })} WIB.`);
+  if ((await balanceOf(userId)) < amount) throw new Error("Insufficient balance.");
   const pf = platformDb();
   const { data: w, error } = await pf.from("withdrawals").insert({ user_id: userId, bank_account_id: bank.id, amount, status: "Requested" }).select("id").single();
   if (error) throw new Error(error.message);
@@ -59,7 +59,7 @@ export async function advanceWithdrawal(id: string, actor: string) {
 export async function failWithdrawal(id: string, actor: string, reason: string) {
   const pf = platformDb();
   const { data: w } = await pf.from("withdrawals").select("*").eq("id", id).single();
-  if (!w || w.status === "Failed") throw new Error("Penarikan tidak bisa ditandai gagal");
+  if (!w || w.status === "Failed") throw new Error("This withdrawal cannot be marked as failed.");
   await pf.from("withdrawals").update({ status: "Failed", failure_reason: reason, updated_at: new Date().toISOString() }).eq("id", id);
   await pf.from("investor_ledger").insert({ user_id: w.user_id, kind: "withdrawal_reversal", amount: Number(w.amount), ref: `withdrawal-reversal:${id}` });
   if (w.status === "Settled") await moveCash(null, `withdrawal-reversal-${id}`, [["distribution", Number(w.amount)]]);

@@ -1,23 +1,23 @@
 import Link from "next/link";
 import { Notice } from "@venue-rwa/ui";
 
-/** Pernyataan wajib PRD v4.1 §7.8. Tampil di halaman produk, portofolio, dan alur beli. */
+/** Required product disclosures from PRD v4.1 §7.8. */
 export function Statements({ compact }: { compact?: boolean }) {
   const items = [
-    "Testnet/simulasi. Tidak ada uang sungguhan.",
-    "Imbal hasil tidak dijamin. Distribusi bergantung pada kinerja venue.",
-    "Likuiditas tidak dijamin. Jual balik bergantung pada kapasitas dan keputusan Grounds.",
-    <>Harga referensi ditentukan berdasarkan valuasi yang dihitung dengan <Link href="/cara-kerja#rumus">rumus berikut</Link>.</>,
-    "Token ini tidak dijamin oleh aset venue. Aset hanya patokan harga.",
-    "Open Grounds belum memiliki izin atau persetujuan regulator untuk menawarkan produk ini.",
+    "Testnet demo only. No real money moves.",
+    "Returns are not guaranteed. Distributions depend on venue performance.",
+    "Liquidity is not guaranteed. Buybacks depend on Grounds and available reserves.",
+    <>Reference prices follow <Link href="/cara-kerja#rumus">the published valuation formula</Link>.</>,
+    "Venue assets are a pricing benchmark, not collateral. Tokens are not backed by venue assets.",
+    "Open Grounds is not licensed or approved by a regulator to offer these products.",
   ];
   if (compact) return <p className="small muted">{items.map((t, i) => <span key={i}>{t} </span>)}</p>;
   return (
-    <Notice tone="warn" title="Sebelum membeli:">
+      <Notice tone="warn" title="Before you participate:">
       <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.7 }}>{items.map((t, i) => <li key={i}>{t}</li>)}</ul>
     </Notice>
   );
 }
 
-/** Label angka asumsi: setiap parameter buatan tim wajib ditandai. */
-export const Asumsi = () => <span className="badge warn plain" title="Angka asumsi tim untuk demo, belum dikalibrasi dengan data nyata" style={{ marginLeft: 6, fontSize: 11 }}>Asumsi</span>;
+/** Assumed demo parameters are always labeled. */
+export const Asumsi = () => <span className="badge warn plain" title="Team-set demo parameter; not calibrated to verified operating data" style={{ marginLeft: 6, fontSize: 11 }}>Assumption</span>;

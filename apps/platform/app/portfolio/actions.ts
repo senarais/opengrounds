@@ -22,7 +22,7 @@ export async function startKycAction() {
 }
 export async function mockKycAction(fd: FormData) {
   const me = await requireInvestor();
-  await guarded(BACK, async () => { await mockKyc(me.userId, me.wallet, String(fd.get("name") ?? "")); return "KYC mock selesai (sandbox, bukan verifikasi identitas sungguhan)."; });
+  await guarded(BACK, async () => { await mockKyc(me.userId, me.wallet, String(fd.get("name") ?? "")); return "Mock KYC complete · sandbox simulation, not real identity verification."; });
 }
 export async function saveBankAction(fd: FormData) {
   const me = await requireInvestor();
@@ -30,14 +30,14 @@ export async function saveBankAction(fd: FormData) {
 }
 export async function withdrawAction(fd: FormData) {
   const me = await requireInvestor();
-  await guarded(BACK, async () => { await requestWithdrawal(me.userId, Math.floor(Number(fd.get("amount")))); return "Penarikan diproses ke rekening terdaftar (pengiriman disimulasikan, sandbox)."; });
+  await guarded(BACK, async () => { await requestWithdrawal(me.userId, Math.floor(Number(fd.get("amount")))); return "Withdrawal submitted to your verified account · sandbox simulation."; });
 }
 export async function cancelOrderAction(fd: FormData) {
   const me = await requireInvestor();
-  await guarded(BACK, async () => { await cancelOrder(me.userId, String(fd.get("id"))); return "Pesanan dibatalkan."; });
+  await guarded(BACK, async () => { await cancelOrder(me.userId, String(fd.get("id"))); return "Order cancelled."; });
 }
 export async function cancelSellBackAction(fd: FormData) {
   const me = await requireInvestor();
-  await guarded(BACK, async () => { await cancelSellBack(me.userId, String(fd.get("id"))); return "Pengajuan jual balik dibatalkan."; });
+  await guarded(BACK, async () => { await cancelSellBack(me.userId, String(fd.get("id"))); return "Sell-back request cancelled."; });
 }
 export const kycIsReal = async () => diditConfig().configured;

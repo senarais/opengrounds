@@ -15,7 +15,7 @@ export function diditConfig() {
 
 async function call<T>(path: string, init: RequestInit, f: typeof fetch = fetch): Promise<T> {
   const c = diditConfig();
-  if (!c.configured) throw new Error("Didit belum dikonfigurasi (DIDIT_API_KEY dan DIDIT_WORKFLOW_ID).");
+  if (!c.configured) throw new Error("Didit is not configured. Set DIDIT_API_KEY and DIDIT_WORKFLOW_ID.");
   const res = await f(`${c.baseUrl}${path}`, { ...init, headers: { "x-api-key": c.apiKey, "content-type": "application/json", accept: "application/json", ...(init.headers ?? {}) } });
   const text = await res.text();
   if (!res.ok) throw new Error(`Didit ${res.status}: ${text.slice(0, 200)}`);
