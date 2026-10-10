@@ -9,16 +9,17 @@ import {AttestationRegistry} from "./AttestationRegistry.sol";
 import {SeriesToken} from "./SeriesToken.sol";
 
 /// @title VenueSeries
-/// @notice Satu seri hak manfaat ekonomi atas X% laba bersih yang bisa dibagikan dari satu venue (PRD v4.1).
-///         Chain berfungsi sebagai wasit:
-///           - token hanya terbit setelah verifikasi aset 2-of-3 (ACQUISITION_CLOSED);
-///           - token hanya berpindah ke/dari investor yang MENANDATANGANI pesanannya sendiri (EIP-712, lewat Privy),
-///             dengan nominal yang wajib sama dengan harga referensi;
-///           - waterfall dan jatah per token dihitung kode dari angka yang disetujui platform + owner;
-///           - kewajiban tercatat, dan status Overdue/Defaulted bisa dipicu siapa pun.
-///         Rupiah tidak pernah lewat sini.
-/// @dev Tidak ada proxy, tidak ada burn. Supply dicetak sekali ke treasury Grounds saat ACQUISITION_CLOSED.
-///      Akumulator jatah: `accPerTokenE18` (rupiah × 1e18 per token); setiap perubahan saldo menyelesaikan jatah pihak terkait dulu.
+/// @notice One series of economic benefit rights over X% of a venue's distributable net profit (PRD v4.1).
+///         The chain acts as referee:
+///           - tokens issue only after 2-of-3 asset verification (ACQUISITION_CLOSED);
+///           - tokens move to/from an investor only if that investor SIGNED their own order (EIP-712, via Privy),
+///             with an amount that must equal the reference price;
+///           - the waterfall and per-token share are computed in code from figures approved by platform + owner;
+///           - obligations are recorded, and Overdue/Defaulted can be triggered by anyone.
+///         Rupiah never passes through here.
+/// @dev No proxy, no burn. Supply is minted once to the Grounds treasury at ACQUISITION_CLOSED.
+///      Payout accumulator: `accPerTokenE18` (rupiah × 1e18 per token); every balance change settles the affected
+///      party's share first.
 contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
     bytes32 public constant CONTROLLER_ROLE = keccak256("CONTROLLER_ROLE");
     bytes32 public constant ORDER_TYPEHASH =
@@ -26,7 +27,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
     bytes32 public constant SELLBACK_TYPEHASH =
         keccak256("SellBack(address holder,uint256 tokens,uint256 paidIdr,uint256 requestId,uint64 deadline)");
 
-    /// @notice Pesanan beli yang ditandatangani investor sebelum membayar. Platform mengeksekusinya setelah rupiah masuk.
+    /// @notice Buy order signed by the investor before paying. The platform executes it after the rupiah arrives.
     struct Order {
         address investor;
         uint256 tokens;
@@ -35,7 +36,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         uint64 deadline;
     }
 
-    /// @notice Permintaan jual balik yang ditandatangani pemegang.
+    /// @notice Sell-back request signed by the holder.
     struct SellBack {
         address holder;
         uint256 tokens;
@@ -56,15 +57,15 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
     }
 
     struct Params {
-        uint16 stakeBps; // X: porsi hak ekonomi yang dibeli SPV
-        uint16 spvFeeBps; // m: biaya manajemen SPV dari P_SPV
-        uint16 maxOpexBps; // plafon biaya operasional terhadap gross
-        uint16 sellbackDiscountBps; // d: diskon jual balik
-        uint16 maxHoldingBps; // batas kepemilikan per investor terhadap supply (10000 = tanpa batas)
-        uint32 lockPeriod; // masa kunci per lot (detik)
-        uint32 payoutWindow; // tenggat dana jatah tersedia setelah periode diposting (detik)
-        uint32 defaultGrace; // masa toleransi Overdue sebelum Defaulted (detik)
-        uint32 ownerSignWindow; // setelah akhir periode + jendela ini, REVENUE_PERIOD boleh PLATFORM + VERIFIER
+        uint16 stakeBps; // X: share of economic rights bought by the SPV
+        uint16 spvFeeBps; // m: SPV management fee taken from P_SPV
+        uint16 maxOpexBps; // opex cap against gross
+        uint16 sellbackDiscountBps; // d: sell-back discount
+        uint16 maxHoldingBps; // per-investor holding cap against supply (10000 = uncapped)
+        uint32 lockPeriod; // lock period per lot (seconds)
+        uint32 payoutWindow; // deadline for payout funds after a period is posted (seconds)
+        uint32 defaultGrace; // grace period from Overdue to Defaulted (seconds)
+        uint32 ownerSignWindow; // after periodEnd + this window, REVENUE_PERIOD may be PLATFORM + VERIFIER
     }
 
     struct Waterfall {
@@ -82,11 +83,11 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         uint64 payoutDue;
         uint256 distributable; // D
         uint256 poolInvestors; // P_inv
-        uint256 deltaE18; // kenaikan akumulator per token
-        uint256 owedIdr; // kewajiban ke pemegang token di luar treasury
-        uint256 minSettleIdr; // owed dikurangi kelonggaran pembulatan (1 rupiah per pemegang)
-        uint256 paidIdr; // dana yang ter-attest sudah dikreditkan
-        uint32 payoutCount; // berapa kali pembayaran jatah dicatat untuk periode ini (boleh bertahap)
+        uint256 deltaE18; // accumulator increase per token
+        uint256 owedIdr; // obligation to token holders outside the treasury
+        uint256 minSettleIdr; // owed minus rounding slack (1 rupiah per holder)
+        uint256 paidIdr; // attested funds already credited
+        uint32 payoutCount; // how many payout settlements were recorded for this period (may be partial)
         bool settled;
         bool overdue;
         bytes32 evidenceHash;
@@ -106,13 +107,13 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
 
     uint256 public accPerTokenE18;
     uint256 public dustE18;
-    mapping(address => uint256) public accruedIdr; // jatah yang sudah diselesaikan per pemegang (kumulatif)
+    mapping(address => uint256) public accruedIdr; // share already settled per holder (cumulative)
     mapping(address => uint256) public lastAccE18;
 
     uint256 public lastPeriodId;
     mapping(uint256 => Period) public periods;
     uint256 public overduePeriods;
-    uint256 public holderCount; // pemegang di luar treasury dengan saldo > 0
+    uint256 public holderCount; // holders outside the treasury with balance > 0
 
     mapping(bytes32 => bool) public disputed;
     uint256 public openDisputes;
@@ -121,10 +122,28 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
 
     event SeriesVerified(bytes32 kybEvidenceHash);
     event SeriesActivated(uint256 valuationIdr, uint256 supply, uint256 refPriceIdr, bytes32 evidenceHash);
-    event Allocated(uint256 indexed orderId, address indexed investor, uint256 tokens, uint256 paidIdr, uint64 unlockAt, bytes32 paymentEvidence);
-    event PeriodPosted(uint256 indexed periodId, uint256 distributable, uint256 poolInvestors, uint256 owedIdr, uint64 payoutDue, bytes32 evidenceHash);
-    event PayoutSettled(uint256 indexed periodId, uint256 paidIdr, uint256 totalPaidIdr, bytes32 payoutRoot, bool settled);
-    event SellBackExecuted(uint256 indexed requestId, address indexed holder, uint256 tokens, uint256 paidIdr, bytes32 paymentEvidence);
+    event Allocated(
+        uint256 indexed orderId,
+        address indexed investor,
+        uint256 tokens,
+        uint256 paidIdr,
+        uint64 unlockAt,
+        bytes32 paymentEvidence
+    );
+    event PeriodPosted(
+        uint256 indexed periodId,
+        uint256 distributable,
+        uint256 poolInvestors,
+        uint256 owedIdr,
+        uint64 payoutDue,
+        bytes32 evidenceHash
+    );
+    event PayoutSettled(
+        uint256 indexed periodId, uint256 paidIdr, uint256 totalPaidIdr, bytes32 payoutRoot, bool settled
+    );
+    event SellBackExecuted(
+        uint256 indexed requestId, address indexed holder, uint256 tokens, uint256 paidIdr, bytes32 paymentEvidence
+    );
     event ValuationUpdated(uint256 indexed nonce, uint256 valuationIdr, uint256 refPriceIdr, bytes32 evidenceHash);
     event Overdue(uint256 indexed periodId);
     event Defaulted(uint256 indexed periodId);
@@ -169,7 +188,9 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         string memory symbol_,
         Params memory p
     ) EIP712("OpenGroundsSeries", "1") {
-        if (p.stakeBps == 0 || p.stakeBps > 10_000 || p.spvFeeBps > 10_000 || p.maxOpexBps > 10_000) revert BadParams();
+        if (p.stakeBps == 0 || p.stakeBps > 10_000 || p.spvFeeBps > 10_000 || p.maxOpexBps > 10_000) {
+            revert BadParams();
+        }
         if (p.sellbackDiscountBps > 10_000 || p.maxHoldingBps == 0 || p.maxHoldingBps > 10_000) revert BadParams();
         if (address(registry_) == address(0) || treasury_ == address(0) || admin == address(0)) revert BadParams();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -185,24 +206,29 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         _;
     }
 
-    // ------------------------------------------------------------------ siklus awal
+    // ------------------------------------------------------------------ initial lifecycle
 
-    /// @notice KYB dan valuasi sudah disetujui manusia (di luar chain); jejaknya di-hash.
+    /// @notice KYB and valuation were approved by humans (off-chain); this records their hash.
     function markVerified(bytes32 kybEvidenceHash) external onlyRole(DEFAULT_ADMIN_ROLE) inState(State.Draft) {
         state = State.Verified;
         emit SeriesVerified(kybEvidenceHash);
     }
 
-    /// @notice ACQUISITION_CLOSED (PLATFORM + COUNTERPARTY): owner menyatakan dana diterima dan hak dialihkan.
-    ///         Supply dicetak sekali ke treasury. `refPrice × supply` harus sama persis dengan `valuasi × X`.
-    function activate(uint256 valuationIdr_, uint256 supply_, uint256 refPriceIdr_, bytes32 evidenceHash, uint64 deadline, bytes[] calldata sigs)
-        external
-        nonReentrant
-        inState(State.Verified)
-    {
+    /// @notice ACQUISITION_CLOSED (PLATFORM + COUNTERPARTY): the owner confirms funds were received and rights assigned.
+    ///         Supply is minted once to the treasury. `refPrice × supply` must exactly equal `valuation × X`.
+    function activate(
+        uint256 valuationIdr_,
+        uint256 supply_,
+        uint256 refPriceIdr_,
+        bytes32 evidenceHash,
+        uint64 deadline,
+        bytes[] calldata sigs
+    ) external nonReentrant inState(State.Verified) {
         if (supply_ == 0 || refPriceIdr_ == 0) revert BadParams();
         if (refPriceIdr_ * supply_ * 10_000 != valuationIdr_ * params.stakeBps) revert BadPrice();
-        bytes32 payload = keccak256(abi.encode(valuationIdr_, supply_, refPriceIdr_, params.stakeBps, params.spvFeeBps, evidenceHash));
+        bytes32 payload = keccak256(
+            abi.encode(valuationIdr_, supply_, refPriceIdr_, params.stakeBps, params.spvFeeBps, evidenceHash)
+        );
         registry.verify(AttestationRegistry.Kind.ACQUISITION_CLOSED, 0, payload, deadline, false, sigs);
         valuationIdr = valuationIdr_;
         supply = supply_;
@@ -212,11 +238,12 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit SeriesActivated(valuationIdr_, supply_, refPriceIdr_, evidenceHash);
     }
 
-    // ------------------------------------------------------------------ alokasi (pesanan yang ditandatangani investor)
+    // ------------------------------------------------------------------ allocation (investor-signed orders)
 
-    /// @notice Alokasikan token dari treasury untuk pesanan yang ditandatangani investor sendiri, dieksekusi platform setelah
-    ///         rupiahnya masuk (bukti pembayaran di-hash di `paymentEvidence`). Tiap pesanan wajib `paidIdr == tokens × refPrice`,
-    ///         investor di allowlist dan tidak dibekukan, pesanan belum kedaluwarsa dan belum pernah dipakai.
+    /// @notice Allocate tokens from the treasury against orders the investors signed themselves, executed by the
+    ///         platform after the rupiah arrives (payment evidence hashed into `paymentEvidence`). Every order requires
+    ///         `paidIdr == tokens × refPrice`, an allowlisted and unfrozen investor, and an order that is neither
+    ///         expired nor already used.
     function allocate(Order[] calldata orders, bytes[] calldata investorSigs, bytes32 paymentEvidence)
         external
         nonReentrant
@@ -225,7 +252,9 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
     {
         if (orders.length == 0 || orders.length != investorSigs.length) revert LengthMismatch();
         uint256 total;
-        for (uint256 i = 0; i < orders.length; i++) total += orders[i].tokens;
+        for (uint256 i = 0; i < orders.length; i++) {
+            total += orders[i].tokens;
+        }
         if (total > token.balanceOf(treasury)) revert InsufficientTreasury();
 
         uint64 unlockAt = uint64(block.timestamp) + params.lockPeriod;
@@ -240,7 +269,9 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
             if (o.tokens == 0 || o.paidIdr != o.tokens * refPriceIdr) revert BadPrice();
             if (!token.isVerified(a)) revert NotVerified(a);
             if (token.frozen(a)) revert IsFrozen(a);
-            if ((token.balanceOf(a) + o.tokens) * 10_000 > uint256(params.maxHoldingBps) * supply) revert HoldingCapExceeded(a);
+            if ((token.balanceOf(a) + o.tokens) * 10_000 > uint256(params.maxHoldingBps) * supply) {
+                revert HoldingCapExceeded(a);
+            }
             orderUsed[o.orderId] = true;
             _settle(a);
             if (token.balanceOf(a) == 0) holderCount++;
@@ -249,19 +280,27 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         }
     }
 
-    // ------------------------------------------------------------------ periode bulanan (REVENUE_PERIOD)
+    // ------------------------------------------------------------------ monthly periods (REVENUE_PERIOD)
 
-    /// @notice Posting satu periode. Kontrak memeriksa potongan ≤ gross dan opex ≤ plafon, lalu menghitung waterfall:
-    ///         D = gross − potongan; P_SPV = D × X; P_inv = P_SPV × (1 − m). Akumulator memakai P_inv; dust dibawa ke periode berikutnya.
-    ///         Penanda tangan: PLATFORM + COUNTERPARTY; bila owner diam melewati akhir periode + ownerSignWindow, PLATFORM + VERIFIER.
-    function postRevenuePeriod(uint256 periodId, uint64 periodEnd, Waterfall calldata w, bytes32 evidenceHash, uint64 deadline, bytes[] calldata sigs)
-        external
-        nonReentrant
-        onlyRole(CONTROLLER_ROLE)
-    {
-        if (state != State.Active && state != State.Disputed && state != State.Overdue && state != State.Liquidating) revert WrongState(state);
+    /// @notice Post one period. The contract checks deductions ≤ gross and opex ≤ cap, then computes the waterfall:
+    ///         D = gross − deductions; P_SPV = D × X; P_inv = P_SPV × (1 − m). The accumulator uses P_inv; dust carries
+    ///         to the next period. Signers: PLATFORM + COUNTERPARTY; if the owner is silent past periodEnd +
+    ///         ownerSignWindow, PLATFORM + VERIFIER.
+    function postRevenuePeriod(
+        uint256 periodId,
+        uint64 periodEnd,
+        Waterfall calldata w,
+        bytes32 evidenceHash,
+        uint64 deadline,
+        bytes[] calldata sigs
+    ) external nonReentrant onlyRole(CONTROLLER_ROLE) {
+        if (state != State.Active && state != State.Disputed && state != State.Overdue && state != State.Liquidating) {
+            revert WrongState(state);
+        }
         if (periodId != lastPeriodId + 1) revert BadPeriod();
-        if (periodEnd > block.timestamp || (periodId > 1 && periodEnd <= periods[periodId - 1].periodEnd)) revert BadPeriod();
+        if (periodEnd > block.timestamp || (periodId > 1 && periodEnd <= periods[periodId - 1].periodEnd)) {
+            revert BadPeriod();
+        }
         if (disputed[_periodRef(periodId)]) revert ItemDisputed();
 
         uint256 deductions = w.refunds + w.opex + w.tax + w.operatorFee + w.reserve + w.platformFee;
@@ -299,10 +338,15 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit PeriodPosted(periodId, d, pInv, owed, due, evidenceHash);
     }
 
-    /// @notice Platform mencatat bahwa dana jatah periode sudah ada di rekening distribusi dan dikreditkan ke ledger investor.
-    ///         Tidak bisa melebihi kewajiban. Boleh bertahap. `payoutRoot` = akar Merkle kredit per investor, sehingga investor
-    ///         dapat membuktikan kreditnya termasuk. Bila tidak dicatat sampai tenggat, siapa pun dapat memicu Overdue.
-    function settlePayout(uint256 periodId, uint256 paidIdr, bytes32 payoutRoot) external nonReentrant onlyRole(CONTROLLER_ROLE) {
+    /// @notice The platform records that a period's payout funds are in the distribution account and credited to
+    ///         investor ledgers. Cannot exceed the obligation. May be partial. `payoutRoot` is the Merkle root of the
+    ///         per-investor credits, so an investor can prove inclusion. If not recorded by the deadline, anyone may
+    ///         trigger Overdue.
+    function settlePayout(uint256 periodId, uint256 paidIdr, bytes32 payoutRoot)
+        external
+        nonReentrant
+        onlyRole(CONTROLLER_ROLE)
+    {
         Period storage p = periods[periodId];
         if (periodId == 0 || periodId > lastPeriodId) revert BadPeriod();
         if (paidIdr == 0 || p.paidIdr + paidIdr > p.owedIdr) revert ExceedsOwed();
@@ -320,7 +364,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit PayoutSettled(periodId, paidIdr, p.paidIdr, payoutRoot, p.settled);
     }
 
-    /// @notice Siapa pun boleh menandai Overdue bila dana jatah belum ter-attest tersedia sampai tenggat.
+    /// @notice Anyone may mark Overdue if payout funds are not attested by the deadline.
     function markOverdue(uint256 periodId) external {
         Period storage p = periods[periodId];
         if (periodId == 0 || periodId > lastPeriodId) revert BadPeriod();
@@ -334,7 +378,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit Overdue(periodId);
     }
 
-    /// @notice Siapa pun boleh menandai Defaulted bila periode Overdue melewati masa toleransi.
+    /// @notice Anyone may mark Defaulted if an overdue period passes the grace period.
     function markDefaulted(uint256 periodId) external inState(State.Overdue) {
         Period storage p = periods[periodId];
         if (!p.overdue || p.settled) revert NothingOwed();
@@ -343,17 +387,18 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit Defaulted(periodId);
     }
 
-    /// @notice Pulih dari Defaulted setelah semua kewajiban terlunasi dan disetujui.
+    /// @notice Recover from Defaulted once all obligations are settled and approved.
     function restoreFromDefault() external onlyRole(DEFAULT_ADMIN_ROLE) inState(State.Defaulted) {
         if (overduePeriods != 0) revert UnsettledPeriods();
         state = openDisputes > 0 ? State.Disputed : State.Active;
         emit Restored();
     }
 
-    // ------------------------------------------------------------------ jual balik (permintaan yang ditandatangani pemegang)
+    // ------------------------------------------------------------------ sell-back (holder-signed requests)
 
-    /// @notice Jual balik ke treasury atas permintaan yang ditandatangani pemegang sendiri, dieksekusi platform setelah dana dari
-    ///         cadangan buyback dikreditkan. Hanya lot yang sudah terbuka, seri Active, harga `refPrice × (1 − d)`.
+    /// @notice Sell back to the treasury against a request the holder signed themselves, executed by the platform after
+    ///         funds from the buyback reserve are credited. Only unlocked lots, Active series, price
+    ///         `refPrice × (1 − d)`.
     function executeSellBack(SellBack calldata r, bytes calldata holderSig, bytes32 paymentEvidence)
         external
         nonReentrant
@@ -363,7 +408,9 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         if (block.timestamp > r.deadline) revert OrderExpired();
         if (sellBackUsed[r.requestId]) revert OrderUsed();
         if (ECDSA.recover(sellBackDigest(r), holderSig) != r.holder) revert BadInvestorSignature();
-        if (r.tokens == 0 || r.paidIdr * 10_000 != r.tokens * refPriceIdr * (10_000 - params.sellbackDiscountBps)) revert BadPrice();
+        if (r.tokens == 0 || r.paidIdr * 10_000 != r.tokens * refPriceIdr * (10_000 - params.sellbackDiscountBps)) {
+            revert BadPrice();
+        }
         if (token.frozen(r.holder)) revert IsFrozen(r.holder);
         sellBackUsed[r.requestId] = true;
         _settle(r.holder);
@@ -373,9 +420,10 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit SellBackExecuted(r.requestId, r.holder, r.tokens, r.paidIdr, paymentEvidence);
     }
 
-    // ------------------------------------------------------------------ revaluasi (VALUATION_UPDATE)
+    // ------------------------------------------------------------------ revaluation (VALUATION_UPDATE)
 
-    /// @notice Revaluasi hanya mengubah harga referensi untuk transaksi BARU. Jumlah token dan hak per token tidak berubah.
+    /// @notice Revaluation changes the reference price for NEW transactions only. Token count and per-token rights are
+    ///         unchanged.
     function updateValuation(uint256 newValuationIdr, bytes32 evidenceHash, uint64 deadline, bytes[] calldata sigs)
         external
         nonReentrant
@@ -392,9 +440,9 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit ValuationUpdated(nonce, newValuationIdr, newRef, evidenceHash);
     }
 
-    // ------------------------------------------------------------------ sengketa
+    // ------------------------------------------------------------------ disputes
 
-    /// @notice Attestor (slot mana pun) atau ADMIN menandai item bersengketa. Item itu ditahan, item lain tetap berjalan.
+    /// @notice An attestor (any slot) or ADMIN marks an item disputed. That item is held; other items keep moving.
     function raiseDispute(bytes32 itemRef, bytes32 reasonHash) external {
         if (!_isAttestor(msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert NotAttestor();
         if (disputed[itemRef]) revert AlreadyDisputed();
@@ -404,7 +452,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit DisputeRaised(itemRef, reasonHash, msg.sender);
     }
 
-    /// @notice Verifier (penengah independen) atau ADMIN menyelesaikan sengketa dengan kode alasan.
+    /// @notice The verifier (independent mediator) or ADMIN resolves a dispute with a reason code.
     function resolveDispute(bytes32 itemRef, bytes32 reasonHash) external {
         if (msg.sender != registry.verifier() && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert NotAttestor();
         if (!disputed[itemRef]) revert NotDisputed();
@@ -414,7 +462,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit DisputeResolved(itemRef, reasonHash, msg.sender);
     }
 
-    // ------------------------------------------------------------------ kepatuhan
+    // ------------------------------------------------------------------ compliance
 
     function setVerified(address account, bool verified) external onlyRole(CONTROLLER_ROLE) {
         token.setVerified(account, verified);
@@ -426,8 +474,12 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit Frozen(account, value);
     }
 
-    /// @notice Pemindahan paksa untuk kepatuhan (mis. putusan, kehilangan akses). Penerima wajib terverifikasi; event wajib.
-    function forcedTransfer(address from, address to, uint256 tokens, bytes32 reasonCode) external nonReentrant onlyRole(CONTROLLER_ROLE) {
+    /// @notice Forced transfer for compliance (e.g. court order, lost access). Recipient must be verified; event required.
+    function forcedTransfer(address from, address to, uint256 tokens, bytes32 reasonCode)
+        external
+        nonReentrant
+        onlyRole(CONTROLLER_ROLE)
+    {
         if (state == State.Closed) revert WrongState(state);
         if (to != treasury && !token.isVerified(to)) revert NotVerified(to);
         if (reasonCode == bytes32(0)) revert BadParams();
@@ -440,15 +492,18 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         emit ForcedTransfer(from, to, tokens, reasonCode);
     }
 
-    // ------------------------------------------------------------------ peristiwa penutup
+    // ------------------------------------------------------------------ closing events
 
     function beginLiquidation(bytes32 evidenceHash) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (state == State.Draft || state == State.Verified || state == State.Liquidating || state == State.Closed) revert WrongState(state);
+        if (state == State.Draft || state == State.Verified || state == State.Liquidating || state == State.Closed) {
+            revert WrongState(state);
+        }
         state = State.Liquidating;
         emit LiquidationStarted(evidenceHash);
     }
 
-    /// @notice Tutup seri setelah distribusi akhir lunas. Token tetap ada, tetapi tidak lagi bernilai klaim. Tanpa burn.
+    /// @notice Close the series after the final distribution is settled. Tokens remain, but no longer carry a claim.
+    ///         No burn.
     function closeSeries() external onlyRole(DEFAULT_ADMIN_ROLE) inState(State.Liquidating) {
         if (overduePeriods != 0 || (lastPeriodId > 0 && !periods[lastPeriodId].settled)) revert UnsettledPeriods();
         state = State.Closed;
@@ -457,7 +512,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
 
     // ------------------------------------------------------------------ view
 
-    /// @notice Total jatah rupiah (kumulatif) untuk pemegang, termasuk yang belum diselesaikan.
+    /// @notice Total rupiah share (cumulative) for a holder, including the part not yet settled.
     function claimableOf(address holder) public view returns (uint256) {
         return accruedIdr[holder] + (token.balanceOf(holder) * (accPerTokenE18 - lastAccE18[holder])) / 1e18;
     }
@@ -466,14 +521,19 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         return periods[periodId];
     }
 
-    /// @notice Digest EIP-712 yang ditandatangani investor untuk pesanan beli.
+    /// @notice EIP-712 digest the investor signs for a buy order.
     function orderDigest(Order calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(ORDER_TYPEHASH, o.investor, o.tokens, o.paidIdr, o.orderId, o.deadline)));
+        return
+            _hashTypedDataV4(
+                keccak256(abi.encode(ORDER_TYPEHASH, o.investor, o.tokens, o.paidIdr, o.orderId, o.deadline))
+            );
     }
 
-    /// @notice Digest EIP-712 yang ditandatangani pemegang untuk jual balik.
+    /// @notice EIP-712 digest the holder signs for a sell-back.
     function sellBackDigest(SellBack calldata r) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(SELLBACK_TYPEHASH, r.holder, r.tokens, r.paidIdr, r.requestId, r.deadline)));
+        return _hashTypedDataV4(
+            keccak256(abi.encode(SELLBACK_TYPEHASH, r.holder, r.tokens, r.paidIdr, r.requestId, r.deadline))
+        );
     }
 
     function periodRef(uint256 periodId) external pure returns (bytes32) {

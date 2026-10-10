@@ -16,7 +16,7 @@ contract VenueSeriesTest is Base {
         bob = vm.addr(PK_BOB);
     }
 
-    // ================================================================== penerbitan (verifikasi aset 2-of-3)
+    // ================================================================== issuance (2-of-3 asset verification)
 
     function test_activate_mintsSupplyOnceToTreasury() public {
         _activate();
@@ -43,7 +43,8 @@ contract VenueSeriesTest is Base {
         bytes32 ev = keccak256("acq");
         bytes32 payload = keccak256(abi.encode(VALUATION, SUPPLY, REF_PRICE, uint16(5000), uint16(200), ev));
         uint64 dl = _deadline();
-        bytes[] memory sigs = _sign(AttestationRegistry.Kind.ACQUISITION_CLOSED, 0, payload, dl, PK_PLATFORM, PK_VERIFIER);
+        bytes[] memory sigs =
+            _sign(AttestationRegistry.Kind.ACQUISITION_CLOSED, 0, payload, dl, PK_PLATFORM, PK_VERIFIER);
         uint8 slot = registry.SLOT_VERIFIER();
         vm.expectRevert(abi.encodeWithSelector(AttestationRegistry.SlotNotAllowed.selector, slot));
         series.activate(VALUATION, SUPPLY, REF_PRICE, ev, dl, sigs);
@@ -61,19 +62,19 @@ contract VenueSeriesTest is Base {
         series.activate(VALUATION, SUPPLY, REF_PRICE, bytes32(0), _deadline(), new bytes[](0));
     }
 
-    // ================================================================== §6.8 "platform curang ditolak"
+    // ================================================================== §6.8 "platform cheating rejected"
 
-    /// @notice §6.8.1 Platform tidak bisa memberi token tanpa tanda tangan investor penerimanya.
+    /// @notice §6.8.1 The platform cannot issue tokens without the receiving investor's signature.
     function test_cheat_allocateWithoutInvestorSignature() public {
         _activate();
         _verifyHolder(alice);
         VenueSeries.Order memory o = VenueSeries.Order(alice, 100, 100 * REF_PRICE, 1, _deadline());
-        bytes memory forged = _sig(PK_PLATFORM, series.orderDigest(o)); // platform menandatangani atas nama alice
+        bytes memory forged = _sig(PK_PLATFORM, series.orderDigest(o)); // platform signs on alice's behalf
         vm.expectRevert(VenueSeries.BadInvestorSignature.selector);
         _exec(o, forged);
     }
 
-    /// @notice §6.8.2 Alokasi dengan nominal rupiah yang tidak sesuai harga ditolak, juga bila investor sendiri menandatanganinya.
+    /// @notice §6.8.2 Allocation with a rupiah amount that does not match the price is rejected, even if the investor signed it.
     function test_cheat_allocateWrongAmount() public {
         _activate();
         _verifyHolder(alice);
@@ -82,18 +83,18 @@ contract VenueSeriesTest is Base {
         _exec(o, sig);
     }
 
-    /// @notice Platform tidak bisa mengubah isi pesanan setelah investor menandatanganinya.
+    /// @notice The platform cannot change an order's contents after the investor signed it.
     function test_cheat_tamperSignedOrder() public {
         _activate();
         _verifyHolder(alice);
         (VenueSeries.Order memory o, bytes memory sig) = _order(PK_ALICE, 100, 100 * REF_PRICE);
         o.tokens = 10;
-        o.paidIdr = 10 * REF_PRICE; // investor membayar untuk 100, platform hanya memberi 10
+        o.paidIdr = 10 * REF_PRICE; // investor paid for 100, platform only delivers 10
         vm.expectRevert(VenueSeries.BadInvestorSignature.selector);
         _exec(o, sig);
     }
 
-    /// @notice §6.8.3 Transfer antar investor ditolak, saat dan setelah masa kunci.
+    /// @notice §6.8.3 Investor-to-investor transfers are rejected, during and after the lock period.
     function test_cheat_investorToInvestorTransfer() public {
         _activate();
         _verifyHolder(alice);
@@ -111,7 +112,7 @@ contract VenueSeriesTest is Base {
         token.transfer(bob, 10);
     }
 
-    /// @notice §6.8.4 Posting periode dengan biaya melebihi plafon ditolak.
+    /// @notice §6.8.4 Posting a period with fees above the cap is rejected.
     function test_cheat_opexAboveCap() public {
         _activate();
         VenueSeries.Waterfall memory w = VenueSeries.Waterfall(52_000_000, 0, 41_700_000, 0, 0, 0, 0); // > 80% gross
@@ -121,7 +122,7 @@ contract VenueSeriesTest is Base {
         series.postRevenuePeriod(1, end, w, bytes32(0), _deadline(), new bytes[](0));
     }
 
-    /// @notice §6.8.5 Mengubah pembagian setelah periode diposting ditolak.
+    /// @notice §6.8.5 Changing the split after a period is posted is rejected.
     function test_cheat_repostPeriod() public {
         _activate();
         _post(1, _exampleWaterfall(), PK_PLATFORM, PK_OWNER);
@@ -133,7 +134,7 @@ contract VenueSeriesTest is Base {
         series.postRevenuePeriod(1, end, w, bytes32(0), _deadline(), new bytes[](0));
     }
 
-    /// @notice Platform sendirian tidak bisa menetapkan laba bulanan: butuh owner (atau verifier bila owner diam).
+    /// @notice The platform alone cannot set the monthly profit: it needs the owner (or the verifier if the owner is silent).
     function test_cheat_platformAloneCannotPostRevenue() public {
         _activate();
         VenueSeries.Waterfall memory w = _exampleWaterfall();
@@ -185,7 +186,7 @@ contract VenueSeriesTest is Base {
         series.postRevenuePeriod(1, end, w, bytes32(0), dl, sigs);
     }
 
-    // ================================================================== pesanan investor
+    // ================================================================== investor orders
 
     function test_order_replayRejected() public {
         _activate();
@@ -213,7 +214,7 @@ contract VenueSeriesTest is Base {
         bytes[] memory sigs = new bytes[](1);
         os[0] = o;
         sigs[0] = sig;
-        vm.prank(alice); // investor tidak bisa mengambil token sendiri tanpa platform mengonfirmasi rupiahnya masuk
+        vm.prank(alice); // the investor cannot take tokens itself before the platform confirms the rupiah arrived
         vm.expectRevert();
         series.allocate(os, sigs, bytes32(0));
     }
@@ -258,7 +259,7 @@ contract VenueSeriesTest is Base {
     function test_lots_mergeWhenFullNeverUnlockEarlier() public {
         _activate();
         _verifyHolder(alice);
-        // via_ir bisa membaca ulang block.timestamp untuk variabel lokal: pakai vm.getBlockTimestamp() untuk waktu sebenarnya
+        // via_ir may re-read block.timestamp for locals: use vm.getBlockTimestamp() for the real time
         for (uint256 i = 0; i < 33; i++) {
             vm.warp(vm.getBlockTimestamp() + 1);
             _allocate(PK_ALICE, 1);
@@ -270,20 +271,20 @@ contract VenueSeriesTest is Base {
         assertEq(ls[31].unlockAt, uint64(vm.getBlockTimestamp() + 600));
     }
 
-    // ================================================================== waterfall dan jatah (contoh PRD §4.6)
+    // ================================================================== waterfall and payouts (PRD §4.6 example)
 
     function test_waterfall_matchesPrdExample() public {
         _activate();
         _verifyHolder(alice);
-        _allocate(PK_ALICE, 10_000); // 10% supply, membayar Rp100 juta
+        _allocate(PK_ALICE, 10_000); // 10% of supply, paying Rp100 million
         _post(1, _exampleWaterfall(), PK_PLATFORM, PK_OWNER);
         VenueSeries.Period memory p = series.periodOf(1);
         assertEq(p.distributable, 15_000_000, "D");
-        assertEq(p.poolInvestors, 7_350_000, "P_inv setelah m 2%");
-        assertEq(p.deltaE18, 73.5e18, "jatah per token Rp73,5");
-        assertEq(series.claimableOf(alice), 735_000, "pemegang 10.000 token");
-        assertEq(p.owedIdr, 735_000, "kewajiban = token di luar treasury x jatah");
-        assertEq(series.claimableOf(treasury), 6_615_000, "bagian token treasury kembali ke Grounds");
+        assertEq(p.poolInvestors, 7_350_000, "P_inv after m 2%");
+        assertEq(p.deltaE18, 73.5e18, "share per token Rp73.5");
+        assertEq(series.claimableOf(alice), 735_000, "holder of 10,000 tokens");
+        assertEq(p.owedIdr, 735_000, "obligation = tokens outside treasury x share");
+        assertEq(series.claimableOf(treasury), 6_615_000, "treasury token share returns to Grounds");
     }
 
     function test_waterfall_deductionsAboveGrossRevert() public {
@@ -302,10 +303,10 @@ contract VenueSeriesTest is Base {
         _allocate(PK_ALICE, 1000);
         VenueSeries.Waterfall memory w = _exampleWaterfall();
         w.opex = 30_000_000;
-        w.operatorFee = 16_000_000; // 52 − 1 − 30 − 1,5 − 16 − 2 − 1,5 = 0
+        w.operatorFee = 16_000_000; // 52 − 1 − 30 − 1.5 − 16 − 2 − 1.5 = 0
         _post(1, w, PK_PLATFORM, PK_OWNER);
         assertEq(series.periodOf(1).distributable, 0);
-        assertTrue(series.periodOf(1).settled, "tanpa kewajiban = otomatis lunas");
+        assertTrue(series.periodOf(1).settled, "no obligation = automatically settled");
     }
 
     function test_poolConservedAcrossPeriods() public {
@@ -333,7 +334,7 @@ contract VenueSeriesTest is Base {
         vm.expectRevert(abi.encodeWithSelector(AttestationRegistry.SlotNotAllowed.selector, slot));
         series.postRevenuePeriod(1, end, w, ev, dl, sigs);
 
-        vm.warp(uint256(end) + 3 days + 1); // owner diam: owner tidak bisa menyandera pembayaran investor
+        vm.warp(uint256(end) + 3 days + 1); // owner silent: the owner cannot hold investor payouts hostage
         dl = _deadline();
         sigs = _sign(AttestationRegistry.Kind.REVENUE_PERIOD, 1, payload, dl, PK_PLATFORM, PK_VERIFIER);
         vm.prank(controller);
@@ -341,7 +342,7 @@ contract VenueSeriesTest is Base {
         assertEq(series.lastPeriodId(), 1);
     }
 
-    // ================================================================== kewajiban, Overdue, Defaulted
+    // ================================================================== obligations, Overdue, Defaulted
 
     function test_payout_cannotExceedOwed() public {
         _activate();
@@ -373,11 +374,11 @@ contract VenueSeriesTest is Base {
         series.markOverdue(1);
 
         vm.warp(block.timestamp + 7 days + 1);
-        vm.prank(makeAddr("anyone")); // siapa pun boleh memicu
+        vm.prank(makeAddr("anyone")); // anyone may trigger it
         series.markOverdue(1);
         assertEq(uint8(series.state()), uint8(VenueSeries.State.Overdue));
 
-        // saat Overdue: tidak ada alokasi baru
+        // while Overdue: no new allocations
         (VenueSeries.Order memory o, bytes memory sig) = _order(PK_ALICE, 1, REF_PRICE);
         vm.expectRevert(abi.encodeWithSelector(VenueSeries.WrongState.selector, VenueSeries.State.Overdue));
         _exec(o, sig);
@@ -421,7 +422,7 @@ contract VenueSeriesTest is Base {
         assertEq(series.periodOf(1).payoutCount, 2);
     }
 
-    // ================================================================== jual balik
+    // ================================================================== sell-back
 
     function test_sellback_onlyUnlockedLots() public {
         _activate();
@@ -437,7 +438,7 @@ contract VenueSeriesTest is Base {
         vm.prank(controller);
         series.executeSellBack(r, sig, bytes32("buyback"));
         assertEq(token.balanceOf(alice), 60);
-        assertEq(token.balanceOf(treasury), SUPPLY - 60, "kembali ke treasury, tidak dibakar");
+        assertEq(token.balanceOf(treasury), SUPPLY - 60, "returns to treasury, not burned");
         assertEq(token.totalSupply(), SUPPLY);
     }
 
@@ -447,7 +448,7 @@ contract VenueSeriesTest is Base {
         _allocate(PK_ALICE, 100);
         vm.warp(block.timestamp + 600);
         VenueSeries.SellBack memory r = VenueSeries.SellBack(alice, 100, 100 * REF_PRICE, 9, _deadline());
-        bytes memory forged = _sig(PK_PLATFORM, series.sellBackDigest(r)); // platform menjual token alice tanpa izinnya
+        bytes memory forged = _sig(PK_PLATFORM, series.sellBackDigest(r)); // platform sells alice's tokens without consent
         vm.prank(controller);
         vm.expectRevert(VenueSeries.BadInvestorSignature.selector);
         series.executeSellBack(r, forged, bytes32(0));
@@ -462,11 +463,11 @@ contract VenueSeriesTest is Base {
         (VenueSeries.SellBack memory r, bytes memory sig) = _sellBack(PK_ALICE, 10_000);
         vm.prank(controller);
         series.executeSellBack(r, sig, bytes32(0));
-        assertEq(series.claimableOf(alice), 735_000, "jatah yang sudah diperoleh tetap milik investor");
+        assertEq(series.claimableOf(alice), 735_000, "already earned share stays with the investor");
         assertEq(series.holderCount(), 0);
     }
 
-    // ================================================================== sengketa, revaluasi, kepatuhan, penutup
+    // ================================================================== disputes, revaluation, compliance, closing
 
     function test_dispute_blocksItem_verifierResolves() public {
         _activate();
@@ -485,7 +486,7 @@ contract VenueSeriesTest is Base {
         series.resolveDispute(ref, bytes32(0));
 
         vm.prank(verifier);
-        series.resolveDispute(ref, keccak256("dimediasi"));
+        series.resolveDispute(ref, keccak256("mediated"));
         assertEq(uint8(series.state()), uint8(VenueSeries.State.Active));
     }
 
@@ -501,7 +502,7 @@ contract VenueSeriesTest is Base {
         _verifyHolder(alice);
         _allocate(PK_ALICE, 100);
         uint256 newVal = 2_400_000_000;
-        uint256 newRef = newVal * 5000 / 10_000 / SUPPLY; // 12.000
+        uint256 newRef = newVal * 5000 / 10_000 / SUPPLY; // 12,000
         bytes32 payload = keccak256(abi.encode(uint256(1), newVal, newRef, bytes32(0)));
         uint64 dl = _deadline();
         bytes[] memory sigs = _sign(AttestationRegistry.Kind.VALUATION_UPDATE, 1, payload, dl, PK_PLATFORM, PK_OWNER);
@@ -512,9 +513,9 @@ contract VenueSeriesTest is Base {
         sigs = _sign(AttestationRegistry.Kind.VALUATION_UPDATE, 1, payload, dl, PK_PLATFORM, PK_VERIFIER);
         series.updateValuation(newVal, bytes32(0), dl, sigs);
         assertEq(series.refPriceIdr(), 12_000);
-        assertEq(token.balanceOf(alice), 100, "jumlah token tidak berubah");
+        assertEq(token.balanceOf(alice), 100, "token count unchanged");
 
-        // pesanan dengan harga lama tidak lagi berlaku
+        // an order at the old price no longer applies
         (VenueSeries.Order memory o, bytes memory sig) = _order(PK_ALICE, 1, REF_PRICE);
         vm.expectRevert(VenueSeries.BadPrice.selector);
         _exec(o, sig);
@@ -536,7 +537,7 @@ contract VenueSeriesTest is Base {
         vm.prank(controller);
         series.forcedTransfer(alice, bob, 10, keccak256("court-order"));
         assertEq(token.balanceOf(bob), 10);
-        assertEq(token.lotsOf(bob)[0].unlockAt, token.lotsOf(alice)[0].unlockAt, "kunci ikut berpindah");
+        assertEq(token.lotsOf(bob)[0].unlockAt, token.lotsOf(alice)[0].unlockAt, "lock moves with the tokens");
     }
 
     function test_liquidation_closeAfterFinalSettled() public {
@@ -545,7 +546,7 @@ contract VenueSeriesTest is Base {
         _allocate(PK_ALICE, 10_000);
         vm.prank(admin);
         series.beginLiquidation(keccak256("asset sale"));
-        _post(1, _exampleWaterfall(), PK_PLATFORM, PK_OWNER); // distribusi akhir
+        _post(1, _exampleWaterfall(), PK_PLATFORM, PK_OWNER); // final distribution
         vm.prank(admin);
         vm.expectRevert(VenueSeries.UnsettledPeriods.selector);
         series.closeSeries();
@@ -553,7 +554,7 @@ contract VenueSeriesTest is Base {
         vm.prank(admin);
         series.closeSeries();
         assertEq(uint8(series.state()), uint8(VenueSeries.State.Closed));
-        assertEq(token.totalSupply(), SUPPLY, "tanpa burn");
+        assertEq(token.totalSupply(), SUPPLY, "no burn");
     }
 
     function test_registry_rotationNeedsDelay() public {

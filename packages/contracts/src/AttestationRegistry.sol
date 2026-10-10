@@ -6,15 +6,15 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title AttestationRegistry
-/// @notice Attestation EIP-712 2-of-3 untuk keputusan yang tidak boleh diambil platform sendirian.
-///         Tiga slot: PLATFORM (sisi Open Grounds), COUNTERPARTY (owner venue, per seri), VERIFIER (pemeriksa independen).
-///         Pasangan penanda tangan per jenis ditegakkan di SINI, bukan di seri, sehingga seri tidak bisa melonggarkannya:
-///           ACQUISITION_CLOSED (verifikasi aset → token boleh terbit) : PLATFORM + COUNTERPARTY
-///           REVENUE_PERIOD (angka waterfall bulanan)                  : PLATFORM + COUNTERPARTY
-///             bila owner diam melewati tenggat                        : PLATFORM + VERIFIER juga sah
-///           VALUATION_UPDATE (harga referensi baru)                   : PLATFORM + VERIFIER
-///         Sisi platform tidak pernah bisa jalan sendiri: selalu butuh satu tanda tangan dari slot lain.
-///         Beli dan jual balik tidak lewat sini: investor sendiri yang menandatangani pesanannya (lihat VenueSeries).
+/// @notice EIP-712 2-of-3 attestations for decisions the platform cannot make alone.
+///         Three slots: PLATFORM (Open Grounds), COUNTERPARTY (venue owner, per series), VERIFIER (independent reviewer).
+///         Signer pairs are enforced HERE, not in the series, so a series cannot loosen them:
+///           ACQUISITION_CLOSED (asset verified, tokens may issue): PLATFORM + COUNTERPARTY
+///           REVENUE_PERIOD (monthly waterfall figures)           : PLATFORM + COUNTERPARTY
+///             if the owner is silent past the deadline           : PLATFORM + VERIFIER also valid
+///           VALUATION_UPDATE (new reference price)               : PLATFORM + VERIFIER
+///         The platform side can never act alone: it always needs one signature from another slot.
+///         Buys and sell-backs do not go through here: investors sign their own orders (see VenueSeries).
 contract AttestationRegistry is EIP712, AccessControl {
     enum Kind {
         ACQUISITION_CLOSED,
@@ -32,10 +32,10 @@ contract AttestationRegistry is EIP712, AccessControl {
 
     address public platform;
     address public verifier;
-    /// @notice Owner (counterparty) per kontrak seri. Hanya seri terdaftar yang boleh memakai attestation.
+    /// @notice Owner (counterparty) per series contract. Only registered series may use attestations.
     mapping(address series => address) public counterpartyOf;
     mapping(address series => bool) public isSeries;
-    /// @notice (kind, seri, refId) yang sudah dipakai: anti-replay.
+    /// @notice (kind, series, refId) already used: anti-replay.
     mapping(bytes32 key => bool) public used;
 
     struct PendingSigners {
@@ -76,7 +76,7 @@ contract AttestationRegistry is EIP712, AccessControl {
 
     // ------------------------------------------------------------------ admin
 
-    /// @notice Daftarkan kontrak seri beserta owner-nya (slot COUNTERPARTY).
+    /// @notice Register a series contract with its owner (COUNTERPARTY slot).
     function registerSeries(address series, address counterparty) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (series == address(0) || counterparty == address(0)) revert ZeroAddress();
         if (counterparty == platform || counterparty == verifier) revert DuplicateAddress();
@@ -93,7 +93,7 @@ contract AttestationRegistry is EIP712, AccessControl {
         emit CounterpartyChanged(series, counterparty);
     }
 
-    /// @notice Rotasi penanda tangan dengan jeda waktu dan event publik (PRD §6.5).
+    /// @notice Rotate signers with a time delay and a public event (PRD §6.5).
     function proposeSigners(address platform_, address verifier_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (platform_ == address(0) || verifier_ == address(0)) revert ZeroAddress();
         if (platform_ == verifier_) revert DuplicateAddress();
@@ -112,19 +112,26 @@ contract AttestationRegistry is EIP712, AccessControl {
         emit SignersRotated(p.platform, p.verifier);
     }
 
-    // ------------------------------------------------------------------ verifikasi
+    // ------------------------------------------------------------------ verification
 
-    function digest(Kind kind, address series, uint256 refId, bytes32 payloadHash, uint64 deadline) public view returns (bytes32) {
+    function digest(Kind kind, address series, uint256 refId, bytes32 payloadHash, uint64 deadline)
+        public
+        view
+        returns (bytes32)
+    {
         return _hashTypedDataV4(
-            keccak256(abi.encode(ATTESTATION_TYPEHASH, uint8(kind), uint256(uint160(series)), refId, payloadHash, deadline))
+            keccak256(
+                abi.encode(ATTESTATION_TYPEHASH, uint8(kind), uint256(uint160(series)), refId, payloadHash, deadline)
+            )
         );
     }
 
-    /// @notice Slot yang boleh menandatangani suatu jenis. `ownerSilent` hanya berpengaruh untuk REVENUE_PERIOD.
+    /// @notice Slots allowed to sign a given kind. `ownerSilent` only affects REVENUE_PERIOD.
     function allowedSlots(Kind kind, bool ownerSilent) public pure returns (uint8) {
         if (kind == Kind.ACQUISITION_CLOSED) return SLOT_PLATFORM | SLOT_COUNTERPARTY;
         if (kind == Kind.REVENUE_PERIOD) {
-            return ownerSilent ? (SLOT_PLATFORM | SLOT_COUNTERPARTY | SLOT_VERIFIER) : (SLOT_PLATFORM | SLOT_COUNTERPARTY);
+            return
+                ownerSilent ? (SLOT_PLATFORM | SLOT_COUNTERPARTY | SLOT_VERIFIER) : (SLOT_PLATFORM | SLOT_COUNTERPARTY);
         }
         return SLOT_PLATFORM | SLOT_VERIFIER; // VALUATION_UPDATE
     }
@@ -136,12 +143,16 @@ contract AttestationRegistry is EIP712, AccessControl {
         return 0;
     }
 
-    /// @notice Dipanggil kontrak seri. Memeriksa tanda tangan, menandai (kind, seri, refId) terpakai, lalu mencatat event.
-    /// @dev Penanda tangan seri adalah msg.sender, sehingga attestation untuk seri lain tidak bisa dipakai di sini.
-    function verify(Kind kind, uint256 refId, bytes32 payloadHash, uint64 deadline, bool ownerSilent, bytes[] calldata sigs)
-        external
-        returns (uint8 slots)
-    {
+    /// @notice Called by the series contract. Verifies signatures, marks (kind, series, refId) used, then emits an event.
+    /// @dev The series signer is msg.sender, so an attestation for another series cannot be reused here.
+    function verify(
+        Kind kind,
+        uint256 refId,
+        bytes32 payloadHash,
+        uint64 deadline,
+        bool ownerSilent,
+        bytes[] calldata sigs
+    ) external returns (uint8 slots) {
         address series = msg.sender;
         if (!isSeries[series]) revert NotRegisteredSeries();
         if (block.timestamp > deadline) revert Expired();

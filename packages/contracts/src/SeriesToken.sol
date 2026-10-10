@@ -4,17 +4,17 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @title SeriesToken
-/// @notice ERC-20 `decimals = 0` untuk satu seri venue. Mengikuti fungsi utama ERC-3643 versi "lite" (PRD v4.1 §6.3):
-///         allowlist (`isVerified`), `canTransfer` dengan kode alasan, `freeze`, dan pemindahan terkontrol. Bukan implementasi
-///         ERC-3643 penuh dan tidak diklaim patuh ERC-3643.
-/// @dev Investor tidak bisa memindahkan token sendiri: `transfer`/`transferFrom`/`approve` selalu revert. Token hanya bergerak
-///      lewat kontrak seri (alokasi dari treasury, jual balik ke treasury, `forcedTransfer`). Supply dicetak sekali, tanpa burn.
-///      Setiap alokasi membentuk lot `{amount, unlockAt}` (FIFO, maks 32). Bila lot penuh, lot baru digabung ke lot terakhir
-///      dengan waktu buka yang LEBIH LAMBAT di antara keduanya, sehingga penggabungan tidak pernah mempercepat pembukaan kunci.
+/// @notice ERC-20 `decimals = 0` for one venue series. Implements the main ERC-3643 "lite" features (PRD v4.1 §6.3):
+///         allowlist (`isVerified`), `canTransfer` with reason codes, `freeze`, and controlled transfers. Not a full
+///         ERC-3643 implementation and not claimed to be ERC-3643 compliant.
+/// @dev Investors cannot move tokens themselves: `transfer`/`transferFrom`/`approve` always revert. Tokens move only
+///      through the series contract (allocation from treasury, sell-back to treasury, `forcedTransfer`). Supply is minted
+///      once, with no burn. Each allocation forms a lot `{amount, unlockAt}` (FIFO, max 32). When lots are full, a new lot
+///      merges into the last one at the LATER of the two unlock times, so merging never unlocks earlier.
 contract SeriesToken is ERC20 {
     uint256 public constant MAX_LOTS = 32;
 
-    // kode alasan canTransfer
+    // canTransfer reason codes
     uint8 public constant OK = 0;
     uint8 public constant NOT_VERIFIED = 1;
     uint8 public constant FROZEN = 2;
@@ -55,7 +55,7 @@ contract SeriesToken is ERC20 {
         return 0;
     }
 
-    // ------------------------------------------------------------------ transfer biasa selalu dikunci
+    // ------------------------------------------------------------------ plain transfers always locked
 
     function transfer(address, uint256) public pure override returns (bool) {
         revert TransfersRestricted();
@@ -69,7 +69,7 @@ contract SeriesToken is ERC20 {
         revert TransfersRestricted();
     }
 
-    // ------------------------------------------------------------------ hanya seri
+    // ------------------------------------------------------------------ series only
 
     function mintSupply(address treasury_, uint256 amount) external onlySeries {
         if (treasury != address(0)) revert AlreadyMinted();
@@ -87,19 +87,19 @@ contract SeriesToken is ERC20 {
         emit Frozen(account, value);
     }
 
-    /// @notice Alokasi treasury → investor; membentuk satu lot terkunci.
+    /// @notice Allocation treasury → investor; forms one locked lot.
     function allocateFromTreasury(address to, uint256 amount, uint64 unlockAt) external onlySeries {
         _update(treasury, to, amount);
         _addLot(to, amount, unlockAt);
     }
 
-    /// @notice Jual balik investor → treasury; hanya dari lot yang sudah terbuka (FIFO).
+    /// @notice Sell-back investor → treasury; only from unlocked lots (FIFO).
     function returnToTreasury(address from, uint256 amount) external onlySeries {
         _consume(from, amount, true);
         _update(from, treasury, amount);
     }
 
-    /// @notice Pemindahan paksa untuk kepatuhan. Lot pengirim dipindahkan apa adanya (waktu buka dipertahankan).
+    /// @notice Forced transfer for compliance. The sender's lots move as-is (unlock times preserved).
     function forced(address from, address to, uint256 amount) external onlySeries {
         if (from == treasury) {
             _update(from, to, amount);
@@ -128,7 +128,7 @@ contract SeriesToken is ERC20 {
         }
     }
 
-    /// @notice Apakah perpindahan `amount` dari `from` ke `to` diizinkan, beserta kode alasannya (untuk dijelaskan di UI).
+    /// @notice Whether a transfer of `amount` from `from` to `to` is allowed, with a reason code (for the UI).
     function canTransfer(address from, address to, uint256 amount) external view returns (bool, uint8) {
         if (frozen[from] || frozen[to]) return (false, FROZEN);
         if (balanceOf(from) < amount) return (false, INSUFFICIENT_BALANCE);
@@ -138,7 +138,7 @@ contract SeriesToken is ERC20 {
         return (true, OK);
     }
 
-    // ------------------------------------------------------------------ lot
+    // ------------------------------------------------------------------ lots
 
     function _addLot(address to, uint256 amount, uint64 unlockAt) private {
         Lot[] storage ls = _lots[to];
@@ -151,8 +151,8 @@ contract SeriesToken is ERC20 {
         ls.push(Lot(uint128(amount), unlockAt));
     }
 
-    /// @dev Kurangi lot FIFO sebanyak `amount`. `onlyUnlocked` = jual balik: lot yang masih terkunci dilewati dan tidak pernah
-    ///      keluar; bila lot terbuka tidak cukup, revert `LockedTokens`.
+    /// @dev Consume lots FIFO by `amount`. `onlyUnlocked` = sell-back: locked lots are skipped and never leave; if
+    ///      unlocked lots are insufficient, revert `LockedTokens`.
     function _consume(address from, uint256 amount, bool onlyUnlocked) private returns (Lot[] memory moved) {
         Lot[] storage ls = _lots[from];
         moved = new Lot[](ls.length);
@@ -168,7 +168,7 @@ contract SeriesToken is ERC20 {
             if (onlyUnlocked) revert LockedTokens();
             revert InsufficientLots();
         }
-        // rapikan: buang lot kosong, urutan sisanya dipertahankan (maks 32 elemen)
+        // compact: drop empty lots, keep the order of the rest (max 32 elements)
         uint256 w;
         for (uint256 r = 0; r < ls.length; r++) {
             if (ls[r].amount == 0) continue;

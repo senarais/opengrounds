@@ -6,7 +6,7 @@ import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 import {SeriesToken} from "../src/SeriesToken.sol";
 import {VenueSeries} from "../src/VenueSeries.sol";
 
-/// @dev Penyiapan bersama: tiga slot penanda tangan, satu seri dengan parameter contoh PRD v4.1 §10.2.
+/// @dev Shared setup: three signer slots, one series with the PRD v4.1 §10.2 example parameters.
 abstract contract Base is Test {
     uint256 internal constant PK_PLATFORM = 0xA11CE;
     uint256 internal constant PK_VERIFIER = 0xB0B;
@@ -15,7 +15,7 @@ abstract contract Base is Test {
     uint256 internal constant PK_ALICE = 0xA71CE;
     uint256 internal constant PK_BOB = 0xB0BB;
 
-    // contoh PRD §4.6: V = Rp2 miliar, X = 50%, p = Rp10.000, N = 100.000
+    // PRD §4.6 example: V = Rp2 billion, X = 50%, p = Rp10,000, N = 100,000
     uint256 internal constant VALUATION = 2_000_000_000;
     uint256 internal constant SUPPLY = 100_000;
     uint256 internal constant REF_PRICE = 10_000;
@@ -49,28 +49,31 @@ abstract contract Base is Test {
         return VenueSeries.Params({
             stakeBps: 5000, // X 50%
             spvFeeBps: 200, // m 2%
-            maxOpexBps: 8000, // plafon opex 80% gross
+            maxOpexBps: 8000, // opex cap 80% of gross
             sellbackDiscountBps: 0, // d 0%
             maxHoldingBps: 10_000,
-            lockPeriod: 600, // demo mode: 10 menit
+            lockPeriod: 600, // demo mode: 10 minutes
             payoutWindow: 7 days,
             defaultGrace: 14 days,
             ownerSignWindow: 3 days
         });
     }
 
-    // ------------------------------------------------------------------ tanda tangan
+    // ------------------------------------------------------------------ signatures
 
     function _sig(uint256 pk, bytes32 d) internal pure returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, d);
         return abi.encodePacked(r, s, v);
     }
 
-    function _sign(AttestationRegistry.Kind kind, uint256 refId, bytes32 payload, uint64 deadline, uint256 pkA, uint256 pkB)
-        internal
-        view
-        returns (bytes[] memory sigs)
-    {
+    function _sign(
+        AttestationRegistry.Kind kind,
+        uint256 refId,
+        bytes32 payload,
+        uint64 deadline,
+        uint256 pkA,
+        uint256 pkB
+    ) internal view returns (bytes[] memory sigs) {
         bytes32 d = registry.digest(kind, address(series), refId, payload, deadline);
         sigs = new bytes[](2);
         sigs[0] = _sig(pkA, d);
@@ -90,7 +93,7 @@ abstract contract Base is Test {
         return uint64(block.timestamp + 1 hours);
     }
 
-    // ------------------------------------------------------------------ alur umum
+    // ------------------------------------------------------------------ common flows
 
     function _activate() internal {
         vm.prank(admin);
@@ -107,9 +110,14 @@ abstract contract Base is Test {
         series.setVerified(a, true);
     }
 
-    /// @dev Pesanan beli yang ditandatangani investor (EIP-712), seperti yang dilakukan Privy di aplikasi.
-    function _order(uint256 pkInvestor, uint256 tokens, uint256 paidIdr) internal returns (VenueSeries.Order memory o, bytes memory sig) {
-        o = VenueSeries.Order({investor: vm.addr(pkInvestor), tokens: tokens, paidIdr: paidIdr, orderId: nextOrder++, deadline: _deadline()});
+    /// @dev Investor-signed buy order (EIP-712), as Privy does in the app.
+    function _order(uint256 pkInvestor, uint256 tokens, uint256 paidIdr)
+        internal
+        returns (VenueSeries.Order memory o, bytes memory sig)
+    {
+        o = VenueSeries.Order({
+            investor: vm.addr(pkInvestor), tokens: tokens, paidIdr: paidIdr, orderId: nextOrder++, deadline: _deadline()
+        });
         sig = _sig(pkInvestor, series.orderDigest(o));
     }
 
@@ -128,13 +136,18 @@ abstract contract Base is Test {
         series.allocate(os, sigs, keccak256(abi.encode("xendit-invoice", o.orderId)));
     }
 
-    function _sellBack(uint256 pkHolder, uint256 tokens) internal returns (VenueSeries.SellBack memory r, bytes memory sig) {
+    function _sellBack(uint256 pkHolder, uint256 tokens)
+        internal
+        returns (VenueSeries.SellBack memory r, bytes memory sig)
+    {
         uint256 paid = tokens * series.refPriceIdr();
-        r = VenueSeries.SellBack({holder: vm.addr(pkHolder), tokens: tokens, paidIdr: paid, requestId: nextSellBack++, deadline: _deadline()});
+        r = VenueSeries.SellBack({
+            holder: vm.addr(pkHolder), tokens: tokens, paidIdr: paid, requestId: nextSellBack++, deadline: _deadline()
+        });
         sig = _sig(pkHolder, series.sellBackDigest(r));
     }
 
-    /// @dev Contoh satu bulan PRD §4.6: D = Rp15 juta.
+    /// @dev PRD §4.6 one-month example: D = Rp15 million.
     function _exampleWaterfall() internal pure returns (VenueSeries.Waterfall memory) {
         return VenueSeries.Waterfall({
             gross: 52_000_000,

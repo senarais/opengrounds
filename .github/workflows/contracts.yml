@@ -1,0 +1,41 @@
+name: contracts
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: forge fmt / build / test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/contracts
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      # lib/ is gitignored, so CI installs deps at the exact commits used locally.
+      - name: Install dependencies
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git -C lib/forge-std checkout 0258fe875e1d8e207c1eb7175e542ea32356773c
+          git clone --filter=blob:none --no-checkout https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+          git -C lib/openzeppelin-contracts checkout 69c8def5f222ff96f2b5beff05dfba996368aa79
+
+      - name: forge fmt --check
+        run: forge fmt --check
+
+      - name: forge build
+        run: forge build
+
+      - name: forge test
+        run: forge test -vvv

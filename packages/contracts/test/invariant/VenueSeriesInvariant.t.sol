@@ -7,8 +7,9 @@ import {AttestationRegistry} from "../../src/AttestationRegistry.sol";
 import {SeriesToken} from "../../src/SeriesToken.sol";
 import {VenueSeries} from "../../src/VenueSeries.sol";
 
-/// @dev Aktor acak untuk invariant test PRD v4.1 §6.7. Aksi sah dijalankan dengan tanda tangan yang benar (investor untuk
-///      pesanannya, platform + owner untuk laba bulanan); aksi curang dicoba dan wajib revert (bila tidak, ghost flag menyala).
+/// @dev Random actors for the PRD v4.1 §6.7 invariant tests. Valid actions run with correct signatures (the investor for
+///      their orders, platform + owner for the monthly profit); cheating actions are attempted and must revert (if not,
+///      a ghost flag turns on).
 contract Handler is Test {
     uint256 internal constant PK_PLATFORM = 0xA11CE;
     uint256 internal constant PK_VERIFIER = 0xB0B;
@@ -22,8 +23,8 @@ contract Handler is Test {
     address[] public actors;
     uint256[] internal actorPks;
 
-    uint256 public ghostPool; // Σ P_inv yang diposting
-    uint256 public ghostSettleOps; // jumlah penyelesaian akumulator (batas atas error pembulatan)
+    uint256 public ghostPool; // Σ P_inv posted
+    uint256 public ghostSettleOps; // accumulator settlement count (upper bound on rounding error)
     uint256 public lastEnd;
     uint256 internal nextOrder = 1000;
     uint256 internal sellRef = 1;
@@ -78,7 +79,7 @@ contract Handler is Test {
         return vm.getBlockTimestamp();
     }
 
-    // ------------------------------------------------------------------ aksi sah
+    // ------------------------------------------------------------------ valid actions
 
     function allocate(uint256 seed, uint256 amount) external {
         if (series.state() != VenueSeries.State.Active) return;
@@ -86,7 +87,8 @@ contract Handler is Test {
         if (avail == 0) return;
         amount = bound(amount, 1, avail < 5000 ? avail : 5000);
         uint256 k = seed % actors.length;
-        VenueSeries.Order memory o = VenueSeries.Order(actors[k], amount, amount * series.refPriceIdr(), nextOrder++, uint64(_now() + 1 hours));
+        VenueSeries.Order memory o =
+            VenueSeries.Order(actors[k], amount, amount * series.refPriceIdr(), nextOrder++, uint64(_now() + 1 hours));
         bytes memory sig = _sig(actorPks[k], series.orderDigest(o));
         _execOrder(o, sig);
         ghostSettleOps += 2;
@@ -147,7 +149,7 @@ contract Handler is Test {
         vm.warp(_now() + bound(dt, 0, 2 days));
     }
 
-    // ------------------------------------------------------------------ percobaan curang (wajib revert)
+    // ------------------------------------------------------------------ cheating attempts (must revert)
 
     function tryInvestorTransfer(uint256 a, uint256 b, uint256 amount) external {
         address from = actors[a % actors.length];
@@ -190,9 +192,10 @@ contract Handler is Test {
     function tryWrongPrice(uint256 seed, uint256 delta) external {
         if (series.state() != VenueSeries.State.Active || token.balanceOf(treasury) == 0) return;
         uint256 k = seed % actors.length;
-        VenueSeries.Order memory o =
-            VenueSeries.Order(actors[k], 1, series.refPriceIdr() + bound(delta, 1, 1e9), nextOrder++, uint64(_now() + 1 hours));
-        bytes memory sig = _sig(actorPks[k], series.orderDigest(o)); // investor sendiri setuju, tetap ditolak
+        VenueSeries.Order memory o = VenueSeries.Order(
+            actors[k], 1, series.refPriceIdr() + bound(delta, 1, 1e9), nextOrder++, uint64(_now() + 1 hours)
+        );
+        bytes memory sig = _sig(actorPks[k], series.orderDigest(o)); // the investor agrees, still rejected
         VenueSeries.Order[] memory os = new VenueSeries.Order[](1);
         bytes[] memory sigs = new bytes[](1);
         os[0] = o;
@@ -219,11 +222,12 @@ contract Handler is Test {
         } catch {}
     }
 
-    /// @dev Platform mencoba memberi token tanpa tanda tangan investor (menandatangani sendiri atas nama investor).
+    /// @dev The platform tries to issue tokens without the investor's signature (signing on the investor's behalf).
     function tryForgedOrder(uint256 seed) external {
         if (series.state() != VenueSeries.State.Active || token.balanceOf(treasury) == 0) return;
-        VenueSeries.Order memory o =
-            VenueSeries.Order(actors[seed % actors.length], 1, series.refPriceIdr(), nextOrder++, uint64(_now() + 1 hours));
+        VenueSeries.Order memory o = VenueSeries.Order(
+            actors[seed % actors.length], 1, series.refPriceIdr(), nextOrder++, uint64(_now() + 1 hours)
+        );
         bytes memory sig = _sig(PK_PLATFORM, series.orderDigest(o));
         VenueSeries.Order[] memory os = new VenueSeries.Order[](1);
         bytes[] memory sigs = new bytes[](1);
@@ -259,19 +263,21 @@ contract VenueSeriesInvariant is Base {
         targetContract(address(handler));
     }
 
-    /// 1. totalSupply tidak berubah setelah activate (tidak ada mint atau burn lagi).
+    /// 1. totalSupply does not change after activate (no further mint or burn).
     function invariant_supplyFixed() public view {
         assertEq(token.totalSupply(), SUPPLY);
     }
 
-    /// 2. Jumlah semua saldo = totalSupply.
+    /// 2. The sum of all balances = totalSupply.
     function invariant_balancesSumToSupply() public view {
         uint256 sum = token.balanceOf(treasury);
-        for (uint256 i = 0; i < actors.length; i++) sum += token.balanceOf(actors[i]);
+        for (uint256 i = 0; i < actors.length; i++) {
+            sum += token.balanceOf(actors[i]);
+        }
         assertEq(sum, token.totalSupply());
     }
 
-    /// 3. Untuk setiap periode, pembayaran yang ter-attest tidak melebihi kewajiban.
+    /// 3. For every period, attested payments never exceed the obligation.
     function invariant_paidNeverExceedsOwed() public view {
         uint256 last = series.lastPeriodId();
         for (uint256 i = 1; i <= last; i++) {
@@ -280,7 +286,7 @@ contract VenueSeriesInvariant is Base {
         }
     }
 
-    /// 4–9. Aksi curang tidak pernah berhasil.
+    /// 4–9. Cheating actions never succeed.
     function invariant_noInvestorToInvestorTransfer() public view {
         assertFalse(handler.cheatInvestorTransfer());
     }
@@ -305,12 +311,14 @@ contract VenueSeriesInvariant is Base {
         assertFalse(handler.cheatForgedOrder());
     }
 
-    /// 10. Tidak ada rupiah yang hilang atau tercipta: akumulator × supply + dust = total pool; jatah semua pemegang ≤ pool,
-    ///     dengan selisih hanya dari pembulatan ke bawah.
+    /// 10. No rupiah is lost or created: accumulator × supply + dust = total pool; all holders' shares ≤ pool, with the
+    ///     difference coming only from rounding down.
     function invariant_poolConservation() public view {
         assertEq(series.accPerTokenE18() * SUPPLY + series.dustE18(), handler.ghostPool() * 1e18);
         uint256 claims = series.claimableOf(treasury);
-        for (uint256 i = 0; i < actors.length; i++) claims += series.claimableOf(actors[i]);
+        for (uint256 i = 0; i < actors.length; i++) {
+            claims += series.claimableOf(actors[i]);
+        }
         assertLe(claims, handler.ghostPool());
         assertLe(handler.ghostPool() - claims, handler.ghostSettleOps() + actors.length + 2);
     }

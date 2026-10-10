@@ -5,15 +5,15 @@ import {Script, console} from "forge-std/Script.sol";
 import {AttestationRegistry} from "../src/AttestationRegistry.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url sepolia --account deployer --sender <DEPLOYER_ADDRESS> --broadcast --verify
-/// Men-deploy AttestationRegistry bersama. Kontrak VenueSeries dibuat backend per venue setelah KYB dan valuasi disetujui.
+/// Deploys the shared AttestationRegistry. The backend creates a VenueSeries per venue after KYB and valuation approval.
 /// Env:
-///   DEPLOYER_ADDRESS            pengirim transaksi deploy
-///   ATTESTOR_PLATFORM_ADDRESS   slot PLATFORM (sisi Open Grounds). Default: OPERATOR_ADDRESS
-///   ATTESTOR_VERIFIER_ADDRESS   slot VERIFIER (pemeriksa independen). Default: SIGNER_3_ADDRESS
-///   REGISTRY_ADMIN_ADDRESS      ADMIN registry (mendaftarkan seri). Default: OPERATOR_ADDRESS. Production: multisig.
+///   DEPLOYER_ADDRESS            deploy transaction sender
+///   ATTESTOR_PLATFORM_ADDRESS   PLATFORM slot (Open Grounds side). Default: OPERATOR_ADDRESS
+///   ATTESTOR_VERIFIER_ADDRESS   VERIFIER slot (independent reviewer). Default: SIGNER_3_ADDRESS
+///   REGISTRY_ADMIN_ADDRESS      registry ADMIN (registers series). Default: OPERATOR_ADDRESS. Production: multisig.
 contract Deploy is Script {
     function run() external {
-        // Private key tidak pernah dibaca script: penandatangan transaksi datang dari CLI (--account/--sender).
+        // The script never reads a private key: the transaction signer comes from the CLI (--account/--sender).
         address deployer = vm.envAddress("DEPLOYER_ADDRESS");
         address operator = vm.envOr("OPERATOR_ADDRESS", deployer);
         address platform = vm.envOr("ATTESTOR_PLATFORM_ADDRESS", operator);
@@ -30,10 +30,14 @@ contract Deploy is Script {
         console.log("admin              ", admin);
 
         string memory json = string.concat(
-            '{"chainId":', vm.toString(block.chainid),
-            ',"AttestationRegistry":"', vm.toString(address(registry)),
-            '","platform":"', vm.toString(platform),
-            '","verifier":"', vm.toString(verifier),
+            '{"chainId":',
+            vm.toString(block.chainid),
+            ',"AttestationRegistry":"',
+            vm.toString(address(registry)),
+            '","platform":"',
+            vm.toString(platform),
+            '","verifier":"',
+            vm.toString(verifier),
             '"}'
         );
         vm.writeFile(string.concat("deployments/", vm.envOr("DEPLOY_OUT", string("latest")), ".json"), json);
