@@ -40,6 +40,9 @@ importers:
       '@venue-rwa/verification':
         specifier: workspace:*
         version: link:../../packages/verification
+      lucide-react:
+        specifier: 0.554.0
+        version: 0.554.0(react@19.3.0)
       next:
         specifier: 16.4.0
         version: 16.4.0(@types/node@22.10.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

@@ -1,0 +1,11 @@
+.tgh { position: relative; overflow: hidden; container-type: size; }
+.tgh-band { position: absolute; inset: 0; pointer-events: none; transition: opacity .5s; }
+.tgh-tile { position: absolute; transform-style: preserve-3d; animation-timing-function: linear; animation-iteration-count: infinite; }
+.tgh-slice { position: absolute; top: 0; overflow: hidden; background: var(--slate); }
+.tgh-slice:first-child { border-radius: 5px 0 0 5px; }
+.tgh-slice:last-child { border-radius: 0 5px 5px 0; }
+.tgh-slice img { position: absolute; top: 0; max-width: none; object-fit: cover; }
+@media (prefers-reduced-motion: reduce) {
+  .tgh-tile { animation-play-state: paused !important; }
+  .tgh-band { transition: none; }
+}
