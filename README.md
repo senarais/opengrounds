@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="apps/platform/public/og-logo.png" width="150" alt="Open Grounds Logo" />
+</div>
+
 # Open Grounds (venue-rwa)
 
 Token **hak manfaat ekonomi atas sebagian laba bersih** venue olahraga yang tanahnya milik sendiri, plus **PoS** (POS/booking) sebagai sumber data pendapatan.
