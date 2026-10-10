@@ -1,29 +1,60 @@
 import Link from "next/link";
-import { Badge, Empty, PageHeader } from "@venue-rwa/ui";
+import { Notice } from "@venue-rwa/ui";
 import { Statements } from "@/components/Statements";
-import { SpotlightPanel } from "@/components/SpotlightPanel";
+import { DEMO_PHOTOS } from "@/lib/demo-photos";
+import { platformDb } from "@/lib/db";
 import { listProducts } from "@/lib/flows/series";
-import { rp } from "@/lib/format";
+import { signedUrl } from "@/lib/storage";
+import { ProductCatalog, type CatalogProduct } from "./ProductCatalog";
+import styles from "./Products.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Venue marketplace · Open Grounds" };
 
-const sportName: Record<string, string> = { futsal: "Futsal", padel: "Padel", tenis: "Tennis", basket: "Basketball", badminton: "Badminton", voli: "Volleyball", "mini soccer": "Mini soccer", lainnya: "Other" };
-
 export default async function Products() {
-  const list = await listProducts().catch(() => []);
+  let failed = false;
+  const list = await listProducts().catch(() => { failed = true; return []; });
+  const ids = [...new Set(list.map(({ venue }) => venue.id))];
+  const { data: photos } = ids.length
+    ? await platformDb().from("documents").select("venue_id,storage_path,original_name").eq("kind", "photo").in("venue_id", ids).order("uploaded_at")
+    : { data: [] };
+  const products: CatalogProduct[] = await Promise.all(list.map(async ({ series: s, venue: v }) => {
+    const photo = photos?.find((p) => p.venue_id === v.id);
+    return {
+      id: s.id,
+      name: v.name,
+      city: v.city,
+      province: v.province,
+      sports: v.sports ?? [],
+      price: Number(s.ref_price),
+      stake: Number(s.stake_bps) / 100,
+      supply: Number(s.supply),
+      status: s.status,
+      courts: v.facilities?.length ?? 0,
+      photo: photo ? await signedUrl(photo.storage_path, 3600).catch(() => null) : null,
+      reference: Object.entries(DEMO_PHOTOS).find(([key]) => photo?.original_name === `demo-reference-${key}.jpg`)?.[1],
+    };
+  }));
+
   return (
     <div className="container">
-      <PageHeader eyebrow="Marketplace" title="Venues in play." lead="Each series represents economic rights to a share of one venue’s distributable net profit. Review the figures, terms, and risks before taking part." />
-      {list.length === 0 ? <Empty>No venue series are available yet. Listings appear after review, owner approval, and activation.</Empty> : (
-        <div className="grid c3">
-          {list.map(({ series: s, venue: v }) => (
-            <Link key={s.id} className="og-market-link" href={`/products/${s.id}`}>
-              <SpotlightPanel className="og-market-card"><div className="og-market-meta"><span>{(v.sports ?? []).map((sport: string) => sportName[sport.toLowerCase()] ?? sport).join(" · ")}</span><Badge tone={s.status === "Active" ? "ok" : s.status === "Draft" || s.status === "Verified" ? "neutral" : "warn"}>{s.status}</Badge></div><h2>{v.name}</h2><p className="og-market-place">{v.city}, {v.province}</p><div className="og-market-price"><span>Reference price / token</span><strong>{rp(Number(s.ref_price))}</strong></div><div className="og-market-foot"><span>{(s.stake_bps / 100).toFixed(0)}% economic rights</span><span>{Number(s.supply).toLocaleString("en-US")} tokens</span></div></SpotlightPanel>
-            </Link>
-          ))}
+      <header className={styles.hero}>
+        <div>
+          <div className={styles.intro}>Sports venues · economic rights</div>
+          <h1>Know the venue.<br />Understand your share.</h1>
+          <p className={styles.lead}>Explore venues, review their reference-price basis, and understand the share of distributable net profit represented by each token.</p>
+          <div className={styles.heroLinks}><a href="#venues" className="btn primary">Explore venues</a><Link href="/cara-kerja">How profit sharing works</Link></div>
         </div>
-      )}
+        <aside className={styles.guide} aria-label="Before you choose a venue">
+          <h2>Before you choose a venue</h2>
+          <p><b>Review the reference price</b>Compare the price per token with the valuation details on each venue page.</p>
+          <p><b>Understand the profit share</b>The percentage on each card applies to the entire series. Your share depends on your token balance.</p>
+          <p><b>Consider the risks</b>Tokens are not backed by venue assets. Returns and liquidity are not guaranteed.</p>
+        </aside>
+      </header>
+      {failed
+        ? <div className="mt"><Notice tone="warn" title="The venue catalogue is unavailable">Reload the page to try again.</Notice></div>
+        : <ProductCatalog products={products} />}
       <div className="mt"><Statements /></div>
     </div>
   );

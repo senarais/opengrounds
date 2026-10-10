@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="apps/platform/public/og-logo.png" width="150" alt="Open Grounds Logo" />
+</div>
+
 # Open Grounds (venue-rwa)
 
 Token **hak manfaat ekonomi atas sebagian laba bersih** venue olahraga yang tanahnya milik sendiri, plus **PoS** (POS/booking) sebagai sumber data pendapatan.
@@ -78,3 +82,5 @@ Open Grounds tidak memiliki izin regulator; rupiah dan escrow disimulasikan; 2-d
 Foto referensi dan lisensi tercatat di `apps/platform/lib/demo-photos.ts` dan ditampilkan di galeri; bukan bukti venue fiktif. Seed tidak menghubungi bank/payment gateway sungguhan. Baris pembayaran memakai `simulated=true`; ledger dibuat oleh jalur settlement PoS. Jalankan seed sekali per varian; pengajuan yang sudah ada tidak digandakan.
 
 Untuk demo Kenangan yang sudah Active, `pnpm --filter @venue-rwa/platform exec tsx --env-file=../../.env scripts/seed-active-profit.ts` mengisi pembayaran sandbox dan biaya, tanpa menghapus ledger. Tambahkan `--close` setelah settlement terakhir berusia minimal 60 detik untuk menyiapkan laporan: owner menandatangani → lunasi true-up sandbox bila diminta → saldo investor dikreditkan → investor memilih reinvest atau tarik. Tidak ada kredit laba sebelum pengesahan, dan seed tidak menandatangani sebagai investor/owner.
+
+Saldo uji investor: jalankan `scripts/seed-investor-balance.ts` melalui tsx dengan `.env` root. Hanya Sepolia non-production; perlu `--user=<id>` bila ada lebih dari satu investor. Kredit satu kali Rp100.000 dicatat sebagai `adjustment` dengan label saldo uji, beserta ledger distribusi simulasi dan audit; bukan `distribution` atau PAYOUT_SETTLED. Pengulangan memakai ref yang sama agar tidak menambah kredit lagi.

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAddress, type Address } from "viem";
-import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader } from "@venue-rwa/ui";
+import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader, Bars } from "@venue-rwa/ui";
 import { SellBackBox, WalletStatus } from "@/components/Wallet";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Statements } from "@/components/Statements";
@@ -42,11 +42,18 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
   const bankOk = bank?.status === "verified";
   const canSignOut = true;
 
+  const chartRows = holdings.map((x) => ({
+    label: x.s.symbol,
+    value: Number(x.h.balance) * Number(x.info.refPriceIdr),
+    display: rp(Number(x.h.balance) * Number(x.info.refPriceIdr)),
+  })).sort((a, b) => b.value - a.value);
+
   return (
     <div className="container">
       <AutoRefresh seconds={15} />
       <PageHeader eyebrow="Investor" title="Your portfolio" lead="Track your tokens, available balance, and orders." />
       <Flash ok={sp.ok} err={sp.err} />
+      {ledger.some((entry) => String(entry.ref).startsWith("demo-test-balance-")) && <Notice tone="info" title="Demo test balance added">A demo adjustment was added to your ledger. It is simulated and is not a profit distribution.</Notice>}
       {syncErrs.length > 0 && <Notice tone="warn" title="Some orders could not be synced:">{syncErrs[0]}</Notice>}
 
       <div className="grid c3">
@@ -87,6 +94,11 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
       </div>
 
       <div className="section-title mt"><h2>Your tokens</h2><Link className="small" href="/products">Explore venues</Link></div>
+      {chartRows.length > 0 && (
+        <Card title="Portfolio allocation" subtitle="Token value at current reference prices" className="mb">
+          <Bars rows={chartRows} />
+        </Card>
+      )}
       {holdings.length === 0 ? <Empty>You don’t hold any tokens yet. <Link href="/products" style={{ fontWeight: 700 }}>Explore venues</Link></Empty> : holdings.map(({ s, info, h }) => (
         <SpotlightPanel key={s.id} className="og-portfolio-holding"><div className="card-head"><div><h2><Link href={`/products/${s.id}`}>{s.venues?.name}</Link> · {s.symbol}</h2><p>{info.state} · reference price {rp(Number(info.refPriceIdr))}</p></div></div>
           <div className="grid c2">
@@ -128,7 +140,7 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
           {wds.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{wds.slice(0, 5).map((w) => <tr key={w.id}><td>{date(w.created_at)}</td><td>{rp(Number(w.amount))}</td><td><Badge tone={w.status === "Settled" ? "ok" : w.status === "Failed" ? "bad" : "info"}>{WITHDRAW_STATUS_LABEL[w.status]}</Badge></td></tr>)}</tbody></table>}
         </Card>
         <Card title="Balance history" subtitle="Append-only ledger; corrections use reversing entries">
-          {ledger.length === 0 ? <p className="small muted">No balance activity yet.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Period distribution " + (l.period_no ?? ""), withdrawal: "Withdrawal", withdrawal_reversal: "Failed withdrawal · returned", reinvest: "Reinvestment", sellback: "Sell-back", adjustment: "Adjustment" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
+          {ledger.length === 0 ? <p className="small muted">No balance activity yet.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Period distribution " + (l.period_no ?? ""), withdrawal: "Withdrawal", withdrawal_reversal: "Failed withdrawal · returned", reinvest: "Reinvestment", sellback: "Sell-back", adjustment: String(l.ref).startsWith("demo-test-balance-") ? "Demo test balance (not a profit distribution)" : "Adjustment" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
         </Card>
       </div>
 

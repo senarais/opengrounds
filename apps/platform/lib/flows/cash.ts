@@ -41,15 +41,16 @@ export async function requestWithdrawal(userId: string, amount: number) {
   return w!.id as string;
 }
 
-/** Majukan satu langkah (mock disbursement, sandbox). */
+/** Advance withdrawal through the labeled sandbox flow. */
 export async function advanceWithdrawal(id: string, actor: string) {
   const pf = platformDb();
   const { data: w } = await pf.from("withdrawals").select("*").eq("id", id).single();
+  const psp_ref = w.psp_ref ?? `mock_disb_${id.slice(0, 8)}`;
   const next: Record<string, string> = { Requested: "Screened", Screened: "Sent", Sent: "Settled" };
   let status = w.status as string;
   while (next[status]) {
     status = next[status]!;
-    await pf.from("withdrawals").update({ status, psp_ref: w.psp_ref ?? `mock_disb_${id.slice(0, 8)}`, updated_at: new Date().toISOString() }).eq("id", id);
+    await pf.from("withdrawals").update({ status, psp_ref, updated_at: new Date().toISOString() }).eq("id", id);
     if (status === "Settled") await moveCash(null, `withdrawal-${id}`, [["distribution", -Number(w.amount)]]);
   }
   await audit(actor, "withdrawal.settled", { entity: "withdrawals", entityId: id });
