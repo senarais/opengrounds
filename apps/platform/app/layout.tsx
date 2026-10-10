@@ -5,6 +5,8 @@ import { Logo, NavLink } from "@venue-rwa/ui";
 import "@venue-rwa/ui/styles.css";
 import { canOpen, getMe } from "@/lib/auth";
 import { PrivyShell } from "@/components/PrivyShell";
+import { PlatformShell } from "@/components/PlatformShell";
+import "./landing.css";
 import { chain } from "@/lib/chain";
 import { signOut } from "./login/actions";
 
@@ -23,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="id" className={`${sans.variable} ${display.variable}`}>
       <body>
-        <header className="topbar">
+        <PlatformShell me={me ? { role: me.role } : null} header={<header className="topbar">
           <div className="in">
             <Logo name="Open Grounds" sub="Hak manfaat venue olahraga" />
             <nav className="topnav" aria-label="Navigasi utama">
@@ -55,12 +57,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             )}
             {me?.role === "owner" && <a className="btn sm dark" href={POS_URL} target="_blank" rel="noreferrer">PoS ↗</a>}
           </div>
-        </header>
-        <PrivyShell appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} enabled={me?.role === "investor" || me?.role === "owner"} authId={me?.authId} linked={!!me?.wallet} chainId={chain.id}>{children}</PrivyShell>
-        <footer className="footer">
+        </header>} footer={<footer className="footer">
           Open Grounds · proyek hackathon ETHJKT 2026 (track RWA) · Testnet/simulasi: tidak ada uang sungguhan. Open Grounds belum memiliki izin atau persetujuan regulator untuk menawarkan produk ini.
           Imbal hasil dan likuiditas tidak dijamin. Bukan nasihat hukum atau investasi. <a href="/kebijakan-data" style={{ textDecoration: "underline" }}>Kebijakan data</a> · <a href="/cara-kerja" style={{ textDecoration: "underline" }}>Cara kerja & rumus</a>
-        </footer>
+        </footer>}>
+          <PrivyShell appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} enabled={me?.role === "investor" || me?.role === "owner"} authId={me?.authId} linked={!!me?.wallet} chainId={chain.id}>{children}</PrivyShell>
+        </PlatformShell>
       </body>
     </html>
   );
