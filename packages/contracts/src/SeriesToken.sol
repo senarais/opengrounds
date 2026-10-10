@@ -29,6 +29,7 @@ contract SeriesToken is ERC20 {
 
     address public immutable series;
     address public treasury;
+    bool public minted;
     mapping(address => bool) public isVerified;
     mapping(address => bool) public frozen;
     mapping(address => Lot[]) internal _lots;
@@ -41,6 +42,7 @@ contract SeriesToken is ERC20 {
     error TransfersRestricted();
     error LockedTokens();
     error InsufficientLots();
+    error ZeroAddress();
 
     modifier onlySeries() {
         if (msg.sender != series) revert OnlySeries();
@@ -72,17 +74,21 @@ contract SeriesToken is ERC20 {
     // ------------------------------------------------------------------ series only
 
     function mintSupply(address treasury_, uint256 amount) external onlySeries {
-        if (treasury != address(0)) revert AlreadyMinted();
+        if (minted) revert AlreadyMinted();
+        if (treasury_ == address(0)) revert ZeroAddress();
+        minted = true;
         treasury = treasury_;
         _mint(treasury_, amount);
     }
 
     function setVerified(address account, bool verified) external onlySeries {
+        if (account == address(0)) revert ZeroAddress();
         isVerified[account] = verified;
         emit Verified(account, verified);
     }
 
     function setFrozen(address account, bool value) external onlySeries {
+        if (account == address(0)) revert ZeroAddress();
         frozen[account] = value;
         emit Frozen(account, value);
     }
@@ -101,6 +107,7 @@ contract SeriesToken is ERC20 {
 
     /// @notice Forced transfer for compliance. The sender's lots move as-is (unlock times preserved).
     function forced(address from, address to, uint256 amount) external onlySeries {
+        if (from == address(0) || to == address(0)) revert ZeroAddress();
         if (from == treasury) {
             _update(from, to, amount);
             if (to != treasury) _addLot(to, amount, 0);

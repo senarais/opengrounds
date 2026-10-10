@@ -481,6 +481,7 @@ contract VenueSeries is AccessControl, ReentrancyGuard, EIP712 {
         onlyRole(CONTROLLER_ROLE)
     {
         if (state == State.Closed) revert WrongState(state);
+        if (from == to || tokens == 0 || from == address(0) || to == address(0)) revert BadParams();
         if (to != treasury && !token.isVerified(to)) revert NotVerified(to);
         if (reasonCode == bytes32(0)) revert BadParams();
         _settle(from);
