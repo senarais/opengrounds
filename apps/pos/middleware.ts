@@ -24,4 +24,5 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };
+// Branding assets must remain accessible before authentication.
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon\\.ico$|og-logo\\.png$|icon\\.png$).*)"] };

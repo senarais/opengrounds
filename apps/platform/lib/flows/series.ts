@@ -13,9 +13,13 @@ import { provisionPos } from "./provision";
 
 const ACQUISITION_WINDOW_DAYS = 7;
 
+function requireSpvDeal(series: { spv_approved_at?: string | null; spv_approved_by?: string | null; spv_note?: string | null }) {
+  if (!series.spv_approved_at || !series.spv_approved_by || !series.spv_note?.startsWith("SPV approved the acquisition deal")) throw new Error("The SPV must approve the acquisition deal in the back office first.");
+}
+
 /**
  * Setelah KYB disetujui (§3.3–3.4): valuasi final → workspace PoS → deploy VenueSeries → daftar di registry dengan owner sebagai
- * COUNTERPARTY → markVerified → attestation ACQUISITION_CLOSED disiapkan dan ditandatangani PLATFORM.
+ * COUNTERPARTY → markVerified → SPV reviews the acquisition deal in the back office.
  * Token BELUM terbit: owner harus menandatangani juga (dana akuisisi diterima, simulasi), baru `activate` mencetak supply ke treasury.
  * `assetValue` = V_aset yang ditetapkan reviewer dari dokumen (demo: input reviewer, berlabel).
  */
@@ -72,17 +76,29 @@ export async function issueSeries(venueId: string, actor: string, assetValue: nu
   await pf.from("series").update({ status: "Verified", token_address: info.token }).eq("id", series!.id);
   await audit(actor, "series.deploy", { entity: "series", entityId: series!.id, after: { address, tx, symbol, valuation: val.v, supply: val.supply } });
 
-  // The SPV submission already expresses its acquisition intent; only the owner's confirmation remains.
-  await prepareAcquisition(series!.id);
+  // Owner submission is not SPV purchase approval. The verified series awaits a back-office deal decision.
   return { seriesId: series!.id as string, address };
 }
 
-/** Prepare and sign automatically after KYB approval. The SPV does not repeat its submission approval. */
+/** Record a back-office deal approval before preparing the platform signature. */
+export async function approveAcquisitionDeal(seriesId: string, actor: string) {
+  const ctx = await getSeries(seriesId);
+  if (ctx.series.status !== "Verified") throw new Error("Only verified series can be acquired.");
+  const review = await platformDb().from("kyb_cases").select("status").eq("venue_id", ctx.series.venue_id).order("created_at", { ascending: false }).limit(1).single();
+  if (review.error || review.data?.status !== "APPROVED") throw new Error("Review is not approved.");
+  const { error } = await platformDb().from("series").update({ spv_approved_by: actor, spv_approved_at: new Date().toISOString(), spv_note: "SPV approved the acquisition deal in the back office; owner confirmation remains required." }).eq("id", seriesId).eq("status", "Verified");
+  if (error) throw new Error(error.message);
+  await audit(actor, "acquisition.deal_approved", { entity: "series", entityId: seriesId, detail: { simulated: true } });
+  await prepareAcquisition(seriesId);
+}
+
+/** Prepare the platform signature only after explicit SPV deal approval and KYB approval. */
 export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
   const s = ctx.series;
   if (s.status !== "Verified") throw new Error("Acquisition can only be prepared for a verified series.");
+  requireSpvDeal(s);
   const pf = platformDb();
   const review = await pf.from("kyb_cases").select("status").eq("venue_id", s.venue_id).order("created_at", { ascending: false }).limit(1).single();
   if (review.error || review.data?.status !== "APPROVED") throw new Error("Review is not approved. The acquisition signature is not ready.");
@@ -92,14 +108,6 @@ export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
   const { data: existing, error: existingError } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("ref_id", "0").maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (existing?.status === "submitted") throw new Error("Acquisition has already been submitted on-chain.");
-  // Keep compatibility with the existing schema; these fields now record submission intent, not an extra approval step.
-  if (!s.spv_approved_at) {
-    const submitter = ctx.venue.submitted_by ?? "legacy-submission";
-    const recordedAt = ctx.venue.created_at ?? new Date().toISOString();
-    const { error } = await pf.from("series").update({ spv_approved_by: submitter, spv_approved_at: recordedAt, spv_note: "Purchase approval is included in the SPV application; the owner still confirms rights transfer and payment." }).eq("id", seriesId).is("spv_approved_at", null);
-    if (error) throw new Error(error.message);
-    await audit("platform", "acquisition.submission_recognized", { entity: "series", entityId: seriesId, detail: { submittedBy: submitter, submittedAt: recordedAt, simulated: true } });
-  }
   if (existing?.status === "collecting" && existing.payload_hash === payloadHash && Date.parse(existing.deadline) > Date.now()) {
     if (!(existing.signatures ?? []).some((sig: { slot: string }) => sig.slot === "PLATFORM")) await signAsPlatform(existing.id, addr);
     return existing.id as string;
@@ -116,6 +124,7 @@ export async function prepareAcquisition(seriesId: string, profileHash?: Hex) {
 export async function ownerSignAcquisition(seriesId: string, attId: string, signature: Hex) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
+  requireSpvDeal(ctx.series);
   const { att } = await addSignature(attId, addr, signature, { expectSlot: "COUNTERPARTY" });
   if (!isReady(att)) return "Signature saved. Waiting for the platform signature.";
   return activateIfReady(seriesId);
@@ -124,6 +133,7 @@ export async function ownerSignAcquisition(seriesId: string, attId: string, sign
 export async function activateIfReady(seriesId: string) {
   const ctx = await getSeries(seriesId);
   const addr = needContract(ctx);
+  requireSpvDeal(ctx.series);
   const pf = platformDb();
   const { data: att } = await pf.from("attestations").select("*").eq("series_id", seriesId).eq("kind", "ACQUISITION_CLOSED").eq("status", "collecting").maybeSingle();
   if (!att || !isReady(att)) throw new Error("Acquisition attestation is incomplete.");

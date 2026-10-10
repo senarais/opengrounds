@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+const slideCount = 8;
 import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -11,16 +12,18 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url, { waitUntil: 'networkidle' });
   await page.evaluate(() => document.fonts.ready);
-  assert.equal(await page.locator('.frame').count(), 6);
+  assert.equal(await page.locator('.frame').count(), slideCount);
   assert.equal(await page.locator('.frame:visible').count(), 1);
   assert.equal(await page.locator('.frame.active').getAttribute('id'), 'slide-1');
   const imagesOK = await page.evaluate(() => [...document.images].every(image => image.complete && image.naturalWidth > 0));
   assert.ok(imagesOK, 'Images must load');
+  assert.equal(await page.locator('#slide-2 .slide-content').innerText(), 'Sports Venue');
+  assert.equal(await page.locator('#slide-5 .problem-statements h2').count(), 2);
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('.frame.active').getAttribute('id'), 'slide-2');
   await page.keyboard.press('n');
   assert.ok(await page.locator('#notes-panel').isVisible());
-  assert.match(await page.locator('#notes-text').textContent(), /Owner/);
+  assert.match(await page.locator('#notes-text').textContent(), /Lapangan/);
   await page.keyboard.press('n');
   await page.locator('#sources').click();
   assert.ok(await page.locator('#source-dialog').isVisible());
@@ -28,7 +31,7 @@ try {
   await page.keyboard.press('Escape');
   assert.ok(!(await page.locator('#source-dialog').isVisible()));
   await page.locator('#overview').click();
-  assert.equal(await page.locator('.frame:visible').count(), 6);
+  assert.equal(await page.locator('.frame:visible').count(), slideCount);
   await page.screenshot({ path: 'exports/overview.png', fullPage: true, animations: 'disabled' });
   await page.locator('#slide-4').click();
   assert.equal(await page.locator('.frame.active').getAttribute('id'), 'slide-4');
@@ -38,7 +41,7 @@ try {
   await page.keyboard.press('f');
   assert.ok(await page.evaluate(() => !document.body.classList.contains('is-presenting')));
   const overflow = [];
-  for (let index = 1; index <= 6; index++) {
+  for (let index = 1; index <= slideCount; index++) {
     await page.goto(`${url}/#slide-${index}`);
     await page.evaluate(() => window.finishDeckAnimations());
     await page.screenshot({ path: `exports/slide-${index}.png`, animations: 'disabled' });
@@ -73,14 +76,14 @@ try {
   assert.ok(await page.locator('#notes-panel').isVisible());
   await page.locator('#overview').click();
   await page.emulateMedia({ media: 'print' });
-  assert.equal(await page.locator('.frame:visible').count(), 6);
+  assert.equal(await page.locator('.frame:visible').count(), slideCount);
   assert.ok(!(await page.locator('.toolbar').isVisible()));
   assert.ok(!(await page.locator('#notes-panel').isVisible()));
   const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
   const pageCount = [...pdf.toString('latin1').matchAll(/\/Type\s*\/Page\b/g)].length;
-  assert.equal(pageCount, 6, 'PDF must have exactly 6 pages');
+  assert.equal(pageCount, slideCount, 'PDF must contain all slides');
   assert.deepEqual(errors, [], 'No browser runtime errors');
-  const report = { slides: 6, pdfPages: pageCount, browserErrors: errors, overflow, checks: ['Keyboard navigation', 'Speaker notes', 'Sources dialog + Escape', 'Overview and slide selection', 'Images + local fonts', 'Fullscreen presentation', 'Proportional BPS chart', 'Animated counts reach exact source values', 'Replay animation', 'Reduced motion', '390px mobile', 'Print from overview with notes enabled'], verifiedAt: new Date().toISOString() };
+  const report = { slides: slideCount, pdfPages: pageCount, browserErrors: errors, overflow, checks: ['Keyboard navigation', 'Speaker notes', 'Sources dialog + Escape', 'Overview and slide selection', 'Images + local fonts', 'Fullscreen presentation', 'Proportional BPS chart', 'Animated counts reach exact source values', 'Replay animation', 'Reduced motion', '390px mobile', 'Print from overview with notes enabled'], verifiedAt: new Date().toISOString() };
   await writeFile('exports/check-report.json', JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

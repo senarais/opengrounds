@@ -131,3 +131,209 @@
   .is-overview .frame * { animation: none !important; }
 }
 @media print { .serve-ball { offset-distance: 100%; } }
+
+/* Visual pitch revision: short labels, diagrams and proportional source data. */
+.gap-visual { height: 150px; margin-bottom: 20px; }
+.gap-visual svg { width: 100%; height: 135px; }
+.problem-rows h3 { font-size: 42px; }
+.problem-rows p { font-size: 23px; margin-top: 18px; }
+.problem .problem-label { margin-top: 24px; }
+.booking-score > strong { font-size: 74px; margin-top: 10px; }
+.booking-score h3 { font-size: 26px; }
+.booking-mini { margin-top: 12px; }
+.booking-mini b { font-size: 28px; }
+.booking-score small { margin-top: 12px; font-size: 14px; }
+.ayo-mix { margin-top: 17px; }
+.ayo-mix > span { font-size: 14px; font-weight: 700; }
+.ayo-mix svg { display: block; width: 100%; height: 155px; margin-top: 6px; }
+.mix-bar { transform-box: fill-box; transform-origin: left; }
+.bmc p { font-size: 22px; line-height: 1.55; }
+.bmc .value p { font-size: 25px; }
+.bmc .costs p, .bmc .revenue p { font-size: 21px; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .gap-visual svg { animation: text-wipe .8s .3s both; }
+ .frame.entering .mix-bar { animation: bar-grow 1.2s .5s both; }
+ .frame.entering .mix-bar:nth-child(2) { animation-delay: .65s; }
+ .frame.entering .mix-bar:nth-child(3) { animation-delay: .8s; }
+ .frame.entering .mix-bar:nth-child(4) { animation-delay: .95s; }
+ .frame.entering .mix-bar:nth-child(5) { animation-delay: 1.1s; }
+}
+.booking-score > strong { font-size: 68px; }
+.booking-mini { display: inline-flex; flex-direction: column; gap: 0; width: 48%; }
+.booking-mini b { font-size: 23px; }
+.booking-mini span { font-size: 16px; }
+.ayo-mix svg { height: 135px; }
+/* Revised story: the asset and evidence precede the two access gaps. */
+.venue-divider { background: var(--orange); }
+.venue-divider .slide-header, .venue-divider .slide-footer { display: none; }
+.venue-divider .slide-content { display: flex; align-items: center; justify-content: center; inset: 0; }
+.venue-divider h2 { font-size: 155px; letter-spacing: -8px; z-index: 1; }
+.divider-court { position: absolute; width: 1100px; height: 700px; opacity: .18; transform: rotate(-14deg); }
+.venue-economics .slide-content > h2 { font-size: 74px; }
+.rental-visual { display: grid; grid-template-columns: 780px 1fr; gap: 40px; align-items: center; margin-top: 20px; }
+.rental-visual > svg { width: 740px; height: 300px; }
+.rental-steps { display: flex; align-items: center; gap: 22px; font-size: 32px; flex-wrap: wrap; }
+.rental-steps b { color: #c25a00; }
+.batam-metrics { display: grid; grid-template-columns: repeat(3,1fr); margin-top: 24px; border-top: 2px solid var(--ink); padding-top: 25px; }
+.batam-metrics article { padding: 0 25px; border-left: 1px solid var(--line); }
+.batam-metrics article:first-child { padding-left: 0; border: 0; }
+.batam-metrics strong { display: block; font-size: 53px; letter-spacing: -2px; }
+.batam-metrics span { display: block; font-size: 23px; color: var(--slate); margin-top: 8px; }
+.economics-caption { font-size: 19px; margin-top: 25px; color: var(--slate); }
+.two-gaps { grid-template-columns: 1fr 1fr; margin-top: 40px; }
+.two-gaps .gap-visual { width: 430px; height: 155px; }
+.two-gaps .gap-visual svg { height: 150px; }
+.two-gaps h3 { font-size: 51px; }
+.two-gaps article:nth-child(3) { display: none; }
+.platform-intro .slide-content > img { width: 85px; height: 85px; margin-bottom: 30px; }
+.platform-intro h2 { font-size: 100px; letter-spacing: -5px; }
+.intro-thesis { font-size: 65px; line-height: 1.15; letter-spacing: -2px; margin-top: 25px; }
+.intro-benefits { display: flex; gap: 95px; margin-top: 55px; border-top: 2px solid var(--ink); padding-top: 25px; font-size: 27px; }
+.market .facility-chart { height: 355px; margin-top: 32px; }
+.market .market-layout { margin-top: 42px; }
+.market .ayo-mix svg { height: 180px; }
+.market .booking-score > strong { font-size: 84px; }
+.solution .fine-risk { margin-top: 27px; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .rental-loop { stroke-dasharray: 1; animation: court-draw 1.5s .4s both; }
+ .frame.entering .batam-metrics article { animation: text-wipe .8s .35s both; }
+ .frame.entering .batam-metrics article:nth-child(2) { animation-delay: .6s; }
+ .frame.entering .batam-metrics article:nth-child(3) { animation-delay: .85s; }
+ .frame.entering .intro-thesis { animation: text-wipe .8s .25s both; }
+ .frame.entering .intro-benefits { animation: text-wipe .8s .5s both; }
+}
+/* Compact market-to-problem slide; data keeps its original measurement units. */
+.market-gap h2 { font-size: 62px; }
+.market-gap .market-layout { margin-top: 24px; gap: 38px; }
+.market-gap .facility-chart { height: 235px; margin-top: 18px; }
+.market-gap .chart-caption { font-size: 18px; }
+.market-gap .chart-caveat { font-size: 15px; }
+.market-gap .booking-score > strong { font-size: 68px; margin-top: 7px; }
+.market-gap .booking-score h3 { font-size: 24px; }
+.market-gap .booking-mini { margin-top: 8px; }
+.market-gap .booking-mini b { font-size: 23px; }
+.market-gap .ayo-mix { margin-top: 10px; }
+.market-gap .ayo-mix svg { height: 124px; }
+.access-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 22px; border-top: 2px solid var(--ink); padding-top: 21px; }
+.access-strip article { padding-left: 22px; border-left: 4px solid var(--orange); }
+.access-strip span { font-size: 16px; color: var(--slate); }
+.access-strip h3 { font-size: 29px; margin-top: 7px; letter-spacing: -.8px; }
+.access-strip p { font-size: 19px; margin-top: 8px; color: var(--slate); }
+.venue-economics .rental-steps b { color: #22644a; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .access-strip article { animation: text-wipe .8s .6s both; }
+ .frame.entering .access-strip article:nth-child(2) { animation-delay: .8s; }
+}
+/* Sports Venue divider: a green playing surface with a blue outer court. */
+.venue-divider {
+  background: #163e58;
+  color: #f4f5e9;
+}
+.venue-divider .slide-content {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 199px, rgba(255,255,255,.025) 199px 200px),
+    repeating-linear-gradient(0deg, transparent 0 119px, rgba(255,255,255,.02) 119px 120px),
+    radial-gradient(ellipse at 70% 15%, #245c77 0, #163e58 65%);
+}
+.venue-divider h2 {
+  text-shadow: 0 3px 24px rgba(5,27,29,.28);
+}
+.venue-divider .divider-court {
+  width: 1450px;
+  height: 1000px;
+  opacity: 1;
+  color: #eef0d9;
+  transform: rotate(-14deg);
+  filter: drop-shadow(0 20px 35px rgba(0,0,0,.15));
+}
+.venue-divider .divider-court > g {
+  stroke-width: 3;
+}
+/* Orange surround, green court, and a small lift for the divider title. */
+.venue-divider { background: #FF7A00; }
+.venue-divider .slide-content {
+  background: #FF7A00;
+}
+.venue-divider h2 {
+  text-shadow: 0 4px 2px rgba(10,36,25,.16), 0 10px 22px rgba(10,36,25,.26);
+}
+/* BMC keeps the nine-block canvas, with the economic value at its centre. */
+.bmc-slide h2 { font-size: 62px; line-height: 1.04; }
+.bmc-label { margin-top: 12px; font-size: 17px; }
+.bmc { gap: 12px; margin-top: 20px; grid-template-rows: 160px 160px 132px; }
+.bmc article { padding: 17px; border-radius: 9px; border-color: #d6e0e4; background: #fff; position: relative; overflow: hidden; }
+.bmc h3 { display: flex; gap: 9px; align-items: center; font-size: 19px; margin-bottom: 12px; line-height: 1.12; }
+.bmc h3 > svg { width: 23px; height: 23px; flex: 0 0 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: #22644a; }
+.bmc p { font-size: 21px; line-height: 1.45; }
+.bmc .partners, .bmc .resources, .bmc .channels { background: #edf3ef; border-color: #d8e5dd; }
+.bmc .value { background: #22644a; color: #F8FAFC; border-color: #22644a; }
+.bmc .value h3, .bmc .value p, .bmc .value h3 > svg { color: #F8FAFC; position: relative; z-index: 1; }
+.bmc .value p { font-size: 26px; line-height: 1.35; }
+.bmc .value p + p { margin-top: 29px; }
+.bmc .value p b { display: inline-block; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; color: #c2d9bb; margin-bottom: 12px; }
+.bmc-court { position: absolute; width: 280px; height: 370px; right: -95px; bottom: -50px; transform: rotate(-15deg); fill: none; stroke: #c3dfb9; stroke-width: 2; opacity: .14; pointer-events: none; }
+.bmc .costs { background: #163e58; border-color: #163e58; color: #F8FAFC; }
+.bmc .costs p, .bmc .costs h3 > svg { color: #F8FAFC; }
+.bmc .costs p, .bmc .revenue p { font-size: 20px; line-height: 1.4; }
+.bmc .revenue { background: #FF7A00; border-color: #FF7A00; }
+.bmc .revenue h3 > svg { color: #0F172A; }
+.bmc .revenue b { font-weight: 800; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .bmc article { animation: text-wipe .65s .15s both; }
+ .frame.entering .bmc .activities, .frame.entering .bmc .resources { animation-delay: .25s; }
+ .frame.entering .bmc .value { animation-delay: .4s; }
+ .frame.entering .bmc .relations, .frame.entering .bmc .channels, .frame.entering .bmc .segments { animation-delay: .5s; }
+ .frame.entering .bmc .costs, .frame.entering .bmc .revenue { animation-delay: .65s; }
+}
+/* One-sentence solution before the mechanism; source branding stays with market data. */
+.ayo-brand { display: flex; align-items: center; gap: 15px; margin-bottom: 6px; }
+.ayo-brand img { width: 70px; height: 38px; object-fit: contain; }
+.ayo-brand span { color: var(--slate); font-size: 17px; }
+.concise-intro .slide-content > img { width: 75px; height: 75px; margin-bottom: 28px; }
+.concise-intro h2 { font-size: 68px; letter-spacing: -3px; }
+.intro-definition { font-family: 'Plus Jakarta Sans Variable'; font-size: 57px; line-height: 1.3; letter-spacing: -2px; margin-top: 30px; }
+.intro-definition span { color: #c25a00; font-weight: 800; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .intro-definition { animation: text-wipe .9s .3s both; }
+}
+.problem-statements { display: grid; grid-template-columns: 1fr 1fr; gap: 65px; align-items: center; height: 560px; }
+.problem-statements h2 { font-size: 70px; line-height: 1.08; letter-spacing: -3px; }
+.problem-statements h2 + h2 { border-left: 4px solid var(--orange); padding-left: 60px; }
+.concise-intro .slide-content { display: flex; flex-direction: column; justify-content: center; }
+.concise-intro h2 { font-size: 120px; letter-spacing: -6px; }
+.concise-intro .intro-definition { font-family: 'Inter Variable'; font-size: 38px; line-height: 1.4; letter-spacing: -.8px; margin-top: 32px; color: var(--slate); }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .problem-statements h2 { animation: text-wipe .8s .15s both; }
+ .frame.entering .problem-statements h2 + h2 { animation-delay: .45s; }
+}
+/* Two access gaps, expressed as two sporting surfaces rather than more copy. */
+.visual-problem .slide-content { inset: 0; }
+.visual-problem .problem-statements { height: 900px; gap: 0; }
+.visual-problem .problem-statements article { height: 900px; position: relative; overflow: hidden; padding: 235px 64px 0; }
+.owner-gap { background: #22644a; color: #F8FAFC; }
+.investor-gap { background: #FF7A00; color: #0F172A; }
+.visual-problem .problem-statements h2 { position: relative; z-index: 1; font-size: 78px; letter-spacing: -3.8px; line-height: 1.05; }
+.problem-court { position: absolute; width: 780px; height: 830px; left: -55px; top: 60px; opacity: .13; transform: rotate(-13deg); }
+.problem-people { position: absolute; width: 650px; height: 300px; left: 66px; bottom: 150px; opacity: .2; }
+.visual-problem .slide-header, .visual-problem .slide-footer { z-index: 2; }
+.visual-problem .slide-header > span:first-child { color: #F8FAFC; }
+.visual-problem .slide-footer { border-color: rgba(248,250,252,.25); }
+.visual-problem .slide-footer > span { color: #e4eee3; }
+.visual-problem .slide-footer > b { color: #0F172A; }
+/* The short solution is a brand poster; the next slide explains the mechanism. */
+.visual-intro .slide-content { inset: 0; display: block; }
+.intro-photo { position: absolute; inset: 0 0 0 980px; background: #22644a; }
+.intro-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
+.intro-copy { position: absolute; inset: 0 620px 0 0; padding: 165px 64px 100px; background: #F8FAFC; }
+.intro-og-mark { width: 65px; height: 65px; margin-bottom: 25px; }
+.visual-intro h2 { font-size: 124px; line-height: .95; letter-spacing: -6px; }
+.visual-intro .intro-definition { font-size: 32px; line-height: 1.4; max-width: 760px; margin-top: 30px; letter-spacing: -.5px; }
+.intro-court-line { position: absolute; width: 510px; height: 720px; right: 50px; top: 110px; color: #F8FAFC; opacity: .8; transform: rotate(8deg); }
+.visual-intro .slide-header, .visual-intro .slide-footer { z-index: 2; }
+.visual-intro .slide-header > span:last-child { color: #F8FAFC; padding: 7px 12px; background: #22644a; }
+.visual-intro .slide-footer { right: 650px; }
+@media screen and (prefers-reduced-motion: no-preference) {
+ .frame.entering .problem-people { animation: text-wipe 1s .5s both; }
+ .frame.entering .intro-photo img { animation: photograph-in 1.2s .15s both; }
+ .frame.entering .intro-court-line path { stroke-dasharray: 1; animation: court-draw 1.5s .5s both; }
+}

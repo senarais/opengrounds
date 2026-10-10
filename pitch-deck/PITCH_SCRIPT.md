@@ -1,39 +1,30 @@
-# Open Grounds — naskah pitch sekitar 3 menit 10 detik
-
-Gunakan sebagai panduan; beri jeda saat angka muncul. Urutan: masalah → solusi → bukti pasar → bisnis. Jangan membaca seluruh speaker notes di panggung. Tekan → untuk berpindah; animasi berjalan saat slide masuk.
+# Open Grounds — naskah pitch sekitar tiga menit
 
 ## 1. Open Grounds · 20 detik
+Lapangan yang sama bisa disewa berkali-kali. Open Grounds membuka akses fractional ke hak manfaat ekonomi atas sebagian laba bersih venue olahraga.
 
-“Lapangan yang sama bisa disewa berkali-kali. Aktivitasnya nyata, pembayarannya nyata, dan ada potensi laba dari bisnisnya. Open Grounds membuka akses fractional ke hak manfaat ekonomi atas sebagian laba bersih venue olahraga. Real courts, shared economic upside.”
+## 2. Sports Venue · 5 detik
+Kita mulai dari asetnya: lapangan olahraga.
 
-## 2. The problem · 30 detik
+## 3. Same court. Repeated rentals. · 20 detik
+Court yang sama bisa menghasilkan pendapatan dari penyewaan berulang. Studi Planet Futsal di Batam melaporkan NPV positif Rp38,8 juta, IRR 7%, dan payback sekitar sembilan bulan. Ini satu studi kasus, bukan janji return atau angka seluruh industri.
 
-“Tapi ada tiga akses yang belum terhubung. Owner butuh modal untuk renovasi atau menambah court, sementara opsi mereka sering berarti modal sendiri, utang atau investor besar. Investor retail sulit ikut manfaat ekonomi venue produktif. Dan booking, pembayaran serta biaya tersebar, jadi performa venue sulit diverifikasi. Mencetak token saja tidak menyelesaikan masalah kepercayaan ini.”
+## 4. Market · 25 detik
+BPS mencatat 14.253 desa atau kelurahan punya fasilitas futsal pada 2024. Angka ini menghitung desa, bukan lapangan individual. Digitalisasi juga terlihat: AYO melaporkan 6.800 lebih court yang bisa dipesan, 900 ribu lebih pengguna, di lebih dari 100 kota. Data AYO bukan traction atau partnership kami.
 
-## 3. The solution · 45 detik
+## 5. The Problem · 25 detik
 
-“Open Grounds menghubungkan ketiganya. Owner menjual sebagian hak atas laba bersih yang bisa dibagikan kepada Grounds, SPV pembeli hak. Grounds membayar di depan, lalu menerbitkan unit token yang dijual lewat Open Grounds. Owner tetap mengoperasikan venue.
+Owner ingin renovasi atau menambah court, tapi akses modal masih terbatas pada uang sendiri, utang atau investor besar. Di sisi lain, investor retail sulit ikut manfaat ekonomi venue produktif dalam unit kecil.
 
-Investor membeli dengan rupiah dan menerima bagian proporsional dari pool distribusi bulanan. Platform menangani verifikasi, monitoring dan distribusi. Ethereum menjadi wasit: order harus ditandatangani investor, nominal harus tepat, biaya punya plafon dan angka bulanan perlu persetujuan pihak terkait. Uang rupiah dan data pribadi tetap off-chain.
+## 6. Open Grounds · 15 detik
+Open Grounds menghubungkan dua sisi itu: akses modal untuk owner, akses fractional atas laba venue untuk investor. Owner tetap mengoperasikan lapangan.
 
-Yang dibeli adalah hak ekonomi, bukan tanah. Aset tidak menjamin token; return dan likuiditas juga tidak dijamin.”
+## 7. How it works · 35 detik
 
-## 4. The market · 35 detik
+Owner upload venue dan dokumen. Setelah verifikasi, Grounds sebagai SPV mengurus dan menyetujui deal di back office. Owner menjual sebagian hak atas laba bersih yang bisa dibagikan, mendapat modal di depan, dan tetap menjalankan venue. Investor membeli unit fractional melalui Open Grounds, lalu menerima bagiannya dari laba yang disahkan. Ini hak ekonomi, bukan tanah atau saham PT. Akuisisi dan rupiah demo disimulasikan; hasil dan likuiditas tidak dijamin.
 
-“Bukti pasarnya sudah terlihat. BPS mencatat 14.253 desa atau kelurahan memiliki fasilitas futsal pada 2024. Ini jumlah desa, bukan jumlah lapangan. AYO melaporkan lebih dari 6.800 court yang bisa dipesan, dengan 900 ribu pengguna. Itu data perusahaan AYO, bukan traction kami.
+## 8. Closing · 10 detik
+Open the upside. Hubungkan lapangan produktif dengan modal dan akses manfaat ekonomi yang lebih luas.
 
-Satu studi futsal di Batam juga melaporkan NPV positif. Itu satu kasus, bukan proyeksi return. Kesempatan yang kami lihat: venue fisik sudah ada, booking makin digital, dan court yang sama dapat terus menghasilkan transaksi.”
-
-## 5. Business model canvas · 40 detik
-
-“Kami mulai dari venue dengan tanah milik sendiri, histori minimal 12 bulan dan pendapatan digital minimal 90%. Investor wajib KYC. Pendapatan Open Grounds berasal dari fee layanan bulanan; tarifnya masih perlu divalidasi. Grounds mendapat fee manajemen dari bagiannya sendiri, dengan 2% sebagai asumsi demo.
-
-Model ini perlu modal di depan, verifikasi independen, dan validasi payment serta hukum. Platform dan SPV punya peran serta pendapatan yang berbeda. Fokusnya adalah melayani venue produktif dengan data yang bisa diperiksa.”
-
-## 6. Closing · 20 detik
-
-“Open the upside. Web dan kontrak tersedia, full end-to-end Sepolia masih perlu divalidasi. Pembayaran disimulasikan dan Open Grounds belum berizin. Langkah berikutnya adalah validasi satu venue: bersama owner, reviewer independen, dan partner pembayaran serta hukum yang masih perlu divalidasi. Kami menghubungkan tempat orang bermain dengan akses modal dan partisipasi ekonomi yang bisa diperiksa. Terima kasih.”
-
-## Kalau waktunya kurang
-
-Di market, sebut BPS dan AYO; cukup satu kalimat bahwa studi Batam hanya ilustrasi satu kasus. Di BMC, fokus pada target owner, fee platform versus fee SPV, Closing merangkum next step. Jangan masuk waterfall atau parameter kontrak kecuali ditanya. Detail tersedia di Q_AND_A.md.
+## Hidden backup — BMC
+Target owner punya tanah sendiri, histori minimal 12 bulan, dan pendapatan digital minimal 90%. Investor wajib KYC. Open Grounds mendapatkan fee layanan bulanan; tarif produksi belum final. Grounds mendapat fee manajemen dari bagiannya sendiri, 2% sebagai asumsi demo. Grounds membutuhkan modal akuisisi dan cadangan, jadi pendanaan serta struktur produksi masih perlu divalidasi.

@@ -17,11 +17,11 @@ const destinations: Record<Role, { href: string; label: string }> = {
 };
 
 const roleLinks: Record<Role, { href: string; label: string }[]> = {
-  owner: [{ href: "/owner", label: "My venues" }, { href: "/products", label: "Explore venues" }],
+  owner: [{ href: "/owner", label: "My venues" }, { href: "/owner/apply", label: "Submit venue" }, { href: "/products", label: "Explore venues" }],
   investor: [{ href: "/portfolio", label: "Portfolio" }, { href: "/products", label: "Explore venues" }],
   operator: [{ href: "/operator", label: "Operations" }, { href: "/review", label: "KYB review" }, { href: "/staff", label: "Team" }],
   reviewer: [{ href: "/review", label: "KYB review" }, { href: "/verifier", label: "Verification" }],
-  spv: [{ href: "/spv", label: "Grounds" }, { href: "/spv/apply", label: "New venue" }],
+  spv: [{ href: "/spv", label: "Acquisition & treasury" }],
 };
 
 function Brand() {

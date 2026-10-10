@@ -2,7 +2,9 @@ import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource-variable/inter';
 import './style.css';
 import './visuals.css';
-import { slides, sources } from './content';
+import { slides as allSlides, sources } from './content';
+
+const slides = allSlides.filter(slide => !slide.hidden);
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
@@ -112,7 +114,11 @@ async function present() {
   } catch { /* Presentation layout remains available when fullscreen is unsupported. */ }
 }
 button('present').onclick = present;
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { presenting = false; render(); } });
+document.addEventListener('fullscreenchange', () => {
+  presenting = Boolean(document.fullscreenElement);
+  if (presenting) overview = false;
+  render();
+});
 button('export').onclick = async () => {
   sourceDialog.close();
   await document.fonts.ready;
@@ -126,10 +132,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Home') go(0);
   if (e.key === 'End') go(slides.length - 1);
   if (e.key.toLowerCase() === 'r') render(true);
-  if (e.key.toLowerCase() === 'n') { notes = !notes; render(); }
-  if (e.key.toLowerCase() === 'o') { overview = !overview; render(); }
+  if (e.key.toLowerCase() === 'n' && !presenting) { notes = !notes; render(); }
+  if (e.key.toLowerCase() === 'o' && !presenting) { overview = !overview; render(); }
   if (e.key.toLowerCase() === 'f') void present();
-  if (e.key === 'Escape') { presenting = false; overview = false; render(); }
+  if (e.key === 'Escape') {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else { presenting = false; overview = false; render(); }
+  }
 });
 window.addEventListener('hashchange', () => go(Number(location.hash.match(/slide-(\d+)/)?.[1] ?? 1) - 1));
 render();

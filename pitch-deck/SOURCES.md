@@ -66,3 +66,5 @@ Existing project photos: images.unsplash.com/photo-1595435934249-5df7ed86e1c0 an
 ## Chart construction
 
 Market bar chart: BPS 2024 village counts, one zero-based scale from 0 to 50,000. Football 48,886; badminton 36,540; futsal 14,253. Bar lengths = value / 50,000 × 620 SVG units. Categories are not mutually exclusive and must not be summed. Animated numbers settle at the exact source values, including before printing. AYO numbers use different units and are displayed outside the chart. No synthetic growth, booking time series, TAM or Open Grounds traction is invented.
+
+AYO logo: https://ayo.co/assets/logo/new-new-logo.svg, sourced from https://ayo.co/ on 10 October 2026. Used only to identify the source of company-reported market data; no partnership or endorsement claimed. Trademark belongs to its owner.

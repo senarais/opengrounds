@@ -26,7 +26,7 @@ function Field({ label, children, className = "" }: { label: React.ReactNode; ch
   return <label className={`field ${className}`}>{label}{children}</label>;
 }
 
-export function ApplyForm({ action, error, withOwnerEmail }: { action: (fd: FormData) => Promise<void>; error?: string; withOwnerEmail?: boolean }) {
+export function ApplyForm({ action, error }: { action: (fd: FormData) => Promise<void>; error?: string }) {
   const [step, setStep] = useState(0);
   const [directors, setDirectors] = useState<Person[]>([{ name: "", title: "Director" }]);
   const [commissioners, setCommissioners] = useState<Person[]>([]);
@@ -60,7 +60,6 @@ export function ApplyForm({ action, error, withOwnerEmail }: { action: (fd: Form
         {error && <div className="msg err og-wizard-errors" role="alert">{error}</div>}
 
         <div className="og-wizard-step" data-wizard-step="0" hidden={step !== 0}>
-          {withOwnerEmail && <Section title="Owner account"><Field label="Registered owner email"><input className="input" type="email" name="ownerEmail" autoComplete="email" required /></Field></Section>}
           <Section title="Company details">
             <div className="grid c2"><Field label="Legal company name"><input className="input" name="legalName" required minLength={3} /></Field><Field label="Business classification · KBLI"><input className="input" name="kbli" required pattern="\d{5}" inputMode="numeric" placeholder="5 digits" /></Field><Field label="Business ID · NIB"><input className="input" name="nib" required pattern="\d{13}" inputMode="numeric" placeholder="13 digits" /></Field><Field label="Tax ID · NPWP"><input className="input" name="npwp" required pattern="\d{15,16}" inputMode="numeric" placeholder="15 or 16 digits" /></Field><Field label="Deed number"><input className="input" name="deedNumber" required /></Field><Field label="Deed date"><input className="input" type="date" name="deedDate" required /></Field></div>
             <Field label="Registered address"><input className="input" name="registeredAddress" required minLength={10} /></Field>
@@ -129,7 +128,6 @@ export function ApplyForm({ action, error, withOwnerEmail }: { action: (fd: Form
             <label className="og-check-row"><input type="checkbox" name="bankDataAccess" /> I allow bank statement access for revenue reconciliation.</label>
             <label className="og-check-row"><input type="checkbox" name="dataProcessing" required /> I agree to data processing, including AI review of redacted document text.</label>
             <label className="og-check-row"><input type="checkbox" name="truthful" required /> I confirm this information is accurate.</label>
-            {withOwnerEmail && <p className="og-final-note">Submitting records Grounds’ proposed purchase approval. The owner still signs the rights transfer and simulated payment receipt with their own wallet.</p>}
           </Section>
         </div>
 

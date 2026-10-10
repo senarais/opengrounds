@@ -45,7 +45,7 @@ export default function HowItWorks() {
           <table className="table small">
             <thead><tr><th>Decision</th><th>Signers</th></tr></thead>
             <tbody>
-              <tr><td>Asset verified · tokens may be issued</td><td>Grounds via Open Grounds (buyer) + owner (seller). Grounds records purchase approval in the application.</td></tr>
+              <tr><td>Asset verified · tokens may be issued</td><td>Grounds via Open Grounds (buyer) + owner (seller). Owners upload the venue application. Grounds approves the acquisition deal in its back office before the owner signs.</td></tr>
               <tr><td>Monthly profit figures</td><td>Grounds via Open Grounds + owner; after {P.ownerSignWindowSeconds / 86_400} days<Asumsi /> of owner silence, an independent verifier may sign instead.</td></tr>
               <tr><td>Reference-price revaluation</td><td>Grounds via Open Grounds + independent verifier</td></tr>
               <tr><td>Token purchase / sell-back</td><td>The investor signs the order; the platform executes after rupiah settles.</td></tr>

@@ -42,7 +42,7 @@ export default async function OwnerVenue({ params, searchParams }: { params: Pro
     }
     pocket = await cashBalance(s.id, "spv_pocket"); ownerCash = await cashBalance(s.id, "owner");
   }
-  const acq = (atts ?? []).find((a) => a.kind === "ACQUISITION_CLOSED");
+  const acq = s?.spv_note?.startsWith("SPV approved the acquisition deal") ? (atts ?? []).find((a) => a.kind === "ACQUISITION_CLOSED") : undefined;
   const acqSigned = acq && (acq.signatures ?? []).some((x: any) => x.slot === "COUNTERPARTY");
 
   return (
@@ -59,7 +59,7 @@ export default async function OwnerVenue({ params, searchParams }: { params: Pro
         {kc?.status === "REJECTED" && <p className="small muted">Submit a new application after addressing the reviewer’s notes.</p>}
       </Card>
 
-      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="Review approved">The platform is preparing the acquisition signature. Review the rights transfer and simulated payment details, then sign with your wallet.</Notice></div>}
+      {s && !acq && s.status === "Verified" && <div className="mt"><Notice tone="info" title="Review approved">Grounds is reviewing the acquisition deal in its back office. Once approved, review the rights transfer and simulated payment details, then sign with your wallet.</Notice></div>}
       {acq && (
         <Card title="Acquisition signature" subtitle="ACQUISITION_CLOSED · platform + owner" tone="accent" className="mt">
           <p className="small">By signing, you confirm that <b>{(s!.stake_bps / 100).toLocaleString("en-US")}%</b> of this venue’s distributable net profit rights transfer to Grounds and that you received <b>{rp(Math.floor(Number(s!.valuation_idr) * s!.stake_bps / 10_000))}</b> (<b>simulated</b>; no money moves). Once both signatures are complete, {Number(s!.supply).toLocaleString("en-US")} tokens are minted to the Grounds treasury.</p>
