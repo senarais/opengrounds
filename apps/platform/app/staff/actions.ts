@@ -4,14 +4,14 @@ import { redirect } from "next/navigation";
 import { requireArea } from "@/lib/auth";
 import { createInvite, type StaffRole } from "@/lib/flows/staff";
 
-/** Undang staf. Hanya operator. Operator mendapat tautan sekali pakai; kata sandi dibuat penerima sendiri. */
+/** Invite staff. The recipient creates their password through the one-time link. */
 export async function addStaff(fd: FormData) {
   const me = await requireArea("staff");
   let q: string;
   try {
     const r = await createInvite(me, { name: String(fd.get("name") ?? ""), email: String(fd.get("email") ?? ""), role: String(fd.get("role")) as StaffRole });
     const base = process.env.PLATFORM_URL || "http://localhost:3000";
-    q = `ok=${encodeURIComponent(`Undangan untuk ${r.email} dibuat. Kirim tautan di bawah lewat jalur terpisah; tautan hanya tampil sekali.`)}&link=${encodeURIComponent(`${base}/join/${r.token}`)}`;
+    q = `ok=${encodeURIComponent(`Invitation created for ${r.email}. Share the one-time link below.`)}&link=${encodeURIComponent(`${base}/join/${r.token}`)}`;
   } catch (e: any) {
     q = `err=${encodeURIComponent(e?.message ?? String(e))}`;
   }

@@ -7,7 +7,7 @@ import { dt, rp } from "@/lib/format";
 import { resolveAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Verifier" };
+export const metadata = { title: "Verifier queue · Open Grounds" };
 
 export default async function Verifier({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string }> }) {
   await requireArea("verifier");
@@ -24,37 +24,37 @@ export default async function Verifier({ searchParams }: { searchParams: Promise
 
   return (
     <div className="container">
-      <PageHeader eyebrow="Pihak independen" title="Verifier" lead="Slot VERIFIER: menandatangani revaluasi, menggantikan owner yang diam melewati tenggat, dan menengahi sengketa. Tanda tangan memakai wallet verifier terdaftar (MetaMask), tanpa gas." />
+      <PageHeader eyebrow="Independent review" title="Verifier queue" lead="Review valuations, sign overdue profit periods when an owner is silent, and resolve disputes with your registered MetaMask wallet." />
       <Flash ok={sp.ok} err={sp.err} />
-      <Card title="Wallet verifier terdaftar di registry">{signers ? <span className="mono small">{signers.verifier}</span> : <span className="muted">Registry belum dideploy.</span>}<p className="small muted">Tanda tangan dari wallet lain ditolak server dan kontrak.</p></Card>
+      <Card title="Registered verifier wallet">{signers ? <span className="mono small">{signers.verifier}</span> : <span className="muted">Registry is not deployed.</span>}<p className="small muted">Signatures from other wallets are rejected.</p></Card>
 
-      <div className="section-title mt"><h2>Revaluasi menunggu tanda tangan</h2></div>
-      {valuation.length === 0 ? <Empty>Tidak ada.</Empty> : valuation.map((a) => (
-        <Card key={a.id} title={a.series?.venues?.name} subtitle={`Valuasi baru ${rp(a.payload.newValuation)} → harga referensi ${rp(a.payload.newRef)} (hanya untuk transaksi baru)`}>
-          <p className="small">Dasar: {a.payload.reason}</p>
-          <AttestSignButton attId={a.id} via="metamask" chainId={chain.id} label="Tanda tangani revaluasi" />
+      <div className="section-title mt"><h2>Valuations awaiting signature</h2></div>
+      {valuation.length === 0 ? <Empty>No valuations to review.</Empty> : valuation.map((a) => (
+        <Card key={a.id} title={a.series?.venues?.name} subtitle={`New valuation ${rp(a.payload.newValuation)} → reference price ${rp(a.payload.newRef)} · new purchases only`}>
+          <p className="small">Basis: {a.payload.reason}</p>
+          <AttestSignButton attId={a.id} via="metamask" chainId={chain.id} label="Sign valuation" />
         </Card>
       ))}
 
-      <div className="section-title mt"><h2>Owner diam melewati tenggat</h2></div>
-      {silent.length === 0 ? <Empty>Tidak ada. {waiting.length > 0 && `${waiting.length} periode masih dalam jendela tanda tangan owner.`}</Empty> : silent.map((a) => {
+      <div className="section-title mt"><h2>Overdue owner signatures</h2></div>
+      {silent.length === 0 ? <Empty>No overdue owner signatures. {waiting.length > 0 && `${waiting.length} periods remain within the owner-signing window.`}</Empty> : silent.map((a) => {
         const p = periodOf(a)!;
         return (
-          <Card key={a.id} title={`${a.series?.venues?.name} · periode ${a.ref_id}`} subtitle={`Owner tidak menandatangani sampai ${dt(p.owner_deadline)}`}>
-            <p className="small">D {rp(Number(p.distributable))} · jatah investor {rp(Number(p.p_inv))}. Periksa bukti (hash {a.evidence_hash.slice(0, 14)}…) sebelum menandatangani menggantikan owner.</p>
-            <AttestSignButton attId={a.id} via="metamask" chainId={chain.id} label="Tanda tangani menggantikan owner" confirmText="Anda memverifikasi angka ini dan menandatangani menggantikan owner yang diam?" />
+          <Card key={a.id} title={`${a.series?.venues?.name} · period ${a.ref_id}`} subtitle={`Owner signature deadline · ${dt(p.owner_deadline)}`}>
+            <p className="small">Distributable profit D · {rp(Number(p.distributable))} · investor pool · {rp(Number(p.p_inv))}. Check evidence hash {a.evidence_hash.slice(0, 14)}… before signing in place of the owner.</p>
+            <AttestSignButton attId={a.id} via="metamask" chainId={chain.id} label="Sign for silent owner" confirmText="Do you verify these figures and sign in place of the owner, who missed the deadline?" />
           </Card>
         );
       })}
 
-      <div className="section-title mt"><h2>Sengketa terbuka</h2></div>
-      {(disputes ?? []).length === 0 ? <Empty>Tidak ada.</Empty> : disputes!.map((d: any) => (
-        <Card key={d.id} title={d.series?.venues?.name} subtitle={`Diajukan oleh ${d.raised_by} · ${dt(d.created_at)}`}>
+      <div className="section-title mt"><h2>Open disputes</h2></div>
+      {(disputes ?? []).length === 0 ? <Empty>No open disputes.</Empty> : disputes!.map((d: any) => (
+        <Card key={d.id} title={d.series?.venues?.name} subtitle={`Raised by ${d.raised_by} · ${dt(d.created_at)}`}>
           <p><Badge tone="bad">{d.item_type}</Badge> {d.reason}</p>
           <form action={resolveAction} className="stack" style={{ marginTop: 8 }}>
             <input type="hidden" name="id" value={d.id} />
-            <textarea className="input" name="resolution" rows={2} required minLength={10} placeholder="Dasar keputusan. Periode akan dihitung ulang dan owner menandatangani lagi." />
-            <button className="btn primary">Selesaikan & buka ulang periode</button>
+            <textarea className="input" name="resolution" rows={2} required minLength={10} placeholder="Explain your decision. The period will be recalculated and sent to the owner for signature." />
+            <button className="btn primary">Resolve & reopen period</button>
           </form>
         </Card>
       ))}

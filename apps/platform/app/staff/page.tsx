@@ -3,10 +3,12 @@ import { requireArea } from "@/lib/auth";
 import { platformDb } from "@/lib/db";
 import { pendingInvites, STAFF_ROLES } from "@/lib/flows/staff";
 import { dt } from "@/lib/format";
+import { SpotlightPanel } from "@/components/SpotlightPanel";
 import { addStaff } from "./actions";
 
 export const dynamic = "force-dynamic";
-const ROLE: Record<string, string> = { operator: "Operator (tim kita: review KYB, tutup periode, jual balik, kepatuhan)", reviewer: "Reviewer (pihak luar independen: review KYB, tanda tangan revaluasi, menggantikan owner yang diam, menengahi sengketa)", spv: "Grounds (SPV): menyetujui pembelian hak dari owner, treasury, modal dan cadangan buyback" };
+export const metadata = { title: "Team access · Open Grounds" };
+const ROLE: Record<string, string> = { operator: "Operator · platform operations", reviewer: "Independent reviewer · KYB and verifier", spv: "Grounds · SPV acquisition and treasury" };
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; link?: string }> }) {
   const sp = await searchParams;
@@ -15,25 +17,25 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const { data: staff } = await platformDb().from("users").select("display_name, email, role, created_at").in("role", STAFF_ROLES).order("created_at");
   return (
     <div className="container">
-      <PageHeader eyebrow="Back-office · Staf" title="Staf platform" lead="Akun staf bisa membuka halaman back-office. Wallet verifier (MetaMask) terdaftar di registry dan terpisah dari akun login ini." />
+      <PageHeader eyebrow="Back office · Access" title="Team access" lead="Invite operators, independent reviewers, and Grounds staff." />
       <Flash ok={sp.ok} err={sp.err} />
-      {sp.link && <div style={{ marginBottom: 18 }}><Notice tone="warn" title="Tautan undangan (hanya tampil sekali):"><code className="mono" style={{ wordBreak: "break-all" }}>{sp.link}</code></Notice></div>}
+      {sp.link && <div style={{ marginBottom: 18 }}><Notice tone="warn" title="One-time invitation link · share securely"><code className="mono" style={{ wordBreak: "break-all" }}>{sp.link}</code></Notice></div>}
       <div className="grid c2">
-        <Card title="Daftar staf">
-          <table className="table"><thead><tr><th>Nama</th><th>Peran</th><th>Dibuat</th></tr></thead>
-            <tbody>{(staff ?? []).map((s) => <tr key={s.email}><td><b>{s.display_name}</b><div className="small muted">{s.email}</div></td><td><Badge tone={s.role === "operator" ? "accent" : "neutral"}>{s.role}</Badge></td><td className="small">{dt(s.created_at)}</td></tr>)}</tbody></table>
-          {invites.length > 0 && <p className="small muted" style={{ marginTop: 12 }}>Undangan menunggu: {invites.map((i) => `${i.email} (${i.role}, sampai ${dt(i.expires_at)})`).join("; ")}</p>}
+        <Card title="Platform staff">
+          <table className="table"><thead><tr><th>Name</th><th>Role</th><th>Joined</th></tr></thead>
+            <tbody>{(staff ?? []).map((s) => <tr key={s.email}><td><b>{s.display_name}</b><div className="small muted">{s.email}</div></td><td><Badge tone={s.role === "operator" ? "accent" : "neutral"}>{ROLE[s.role] ?? s.role}</Badge></td><td className="small">{dt(s.created_at)}</td></tr>)}</tbody></table>
+          {invites.length > 0 && <div className="og-pending-invites"><b>Pending invitations</b><p className="small muted">{invites.map((i) => `${i.email} · ${ROLE[i.role] ?? i.role} · expires ${dt(i.expires_at)}`).join("; ")}</p></div>}
         </Card>
         {me.role === "operator" ? (
-          <Card title="Undang staf" subtitle="Penerima membuat kata sandinya sendiri lewat tautan sekali pakai (berlaku 48 jam). Operator tidak pernah melihat kata sandi staf lain.">
+          <SpotlightPanel className="og-invite-panel"><div className="card-head"><div><h2>Invite staff</h2><p>One-time link · expires in 48 hours · recipient creates their own password</p></div></div>
             <form action={addStaff} className="stack">
-              <label className="field">Nama<input className="input" name="name" required /></label>
+              <label className="field">Full name<input className="input" name="name" required /></label>
               <label className="field">Email<input className="input" name="email" type="email" required /></label>
-              <label className="field">Peran<select className="select" name="role">{STAFF_ROLES.map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}</select></label>
-              <div><button className="btn primary">Buat undangan</button></div>
+              <label className="field">Role<select className="select" name="role">{STAFF_ROLES.map((r) => <option key={r} value={r}>{ROLE[r]}</option>)}</select></label>
+              <div><button className="btn primary">Create invitation</button></div>
             </form>
-          </Card>
-        ) : <Card title="Tambah staf"><p className="muted small">Hanya operator yang bisa menambah staf.</p></Card>}
+          </SpotlightPanel>
+        ) : <Card title="Invite staff"><p className="muted small">Only operators can invite staff.</p></Card>}
       </div>
     </div>
   );
