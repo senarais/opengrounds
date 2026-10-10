@@ -3,12 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, ChevronDown, ShieldCheck } from "lucide-react";
 import { VenueReel } from "@/components/VenueReel";
+import { HeroAtmosphere } from "@/components/HeroAtmosphere";
 import { listProducts } from "@/lib/flows/series";
 import { rp } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Open Grounds · Great places to play. A new way to take part.",
+  title: "Open Grounds · Real venues. Shared possibilities.",
   description: "Explore a share of the distributable net profit of sports venues. Meet Open Grounds, the platform connecting venue owners, Grounds, and investors. Sepolia testnet demo.",
 };
 
@@ -35,24 +36,26 @@ export default async function Landing() {
 
   return (
     <main className="og-landing" id="main-content" lang="en">
-      <section className="og-hero og-wrap" aria-labelledby="hero-title">
-        <div className="og-hero-topline"><span className="og-kicker">Real venues. A shared opportunity.</span><span className="og-hero-location">Made for Indonesia <span aria-hidden>↗</span></span></div>
-        <h1 id="hero-title">Great places to play.<br />A new way to <mark>take part.</mark></h1>
-        <div className="og-hero-bottomline">
-          <p>From the courts we play on to the profits they generate. Explore a share of a sports venue’s <strong>distributable net profit</strong> through Open Grounds.</p>
-          <div className="og-actions"><Link className="og-button og-button-primary" href="/products">Explore venues <ArrowUpRight size={20} aria-hidden /></Link><a className="og-text-link" href="#how-it-works">Get to know the model <ArrowDown size={17} aria-hidden /></a></div>
+      <section className="og-hero" aria-labelledby="hero-title">
+        <HeroAtmosphere />
+        <div className="og-wrap og-hero-content">
+          <span className="og-kicker">Sports venues. A shared opportunity.</span>
+          <h1 id="hero-title"><span>Open</span> <span>Grounds.</span></h1>
+          <p className="og-hero-tagline">Real venues. Shared possibilities.</p>
+          <p className="og-hero-description">Participate in a share of sports venues’ <strong>distributable net profit.</strong> Real activity. Clear rules.</p>
+          <div className="og-actions"><Link className="og-button og-button-dark" href="/products">Explore venues <ArrowUpRight size={20} aria-hidden /></Link><a className="og-text-link" href="#how-it-works">Get to know the model <ArrowDown size={17} aria-hidden /></a></div>
         </div>
-        <figure className="og-hero-photo">
-          <Image src="/landing-player.jpg" alt="A tennis player serving on a sunlit clay court" fill priority sizes="(max-width: 1400px) 94vw, 1320px" />
-          <div className="og-photo-note"><span className="og-photo-note-dot" aria-hidden /><span>Places for people.<br /><strong>Possibilities beyond play.</strong></span></div>
-          <figcaption>Illustrative photography · not a listed venue</figcaption>
-        </figure>
-        <div className="og-hero-caption"><span>Sports at the heart. Clear rules at every step.</span><a href="#the-grounds">Discover Open Grounds <ArrowDown size={15} aria-hidden /></a></div>
+        <div className="og-wrap og-hero-caption"><span>Made for Indonesia · Built around play</span><a href="#the-grounds">Meet the grounds <ArrowDown size={15} aria-hidden /></a></div>
       </section>
 
       <section className="og-intro og-wrap og-section" id="the-grounds" aria-labelledby="intro-title">
         <div><span className="og-kicker">A different kind of participation</span><h2 id="intro-title">You know the game.<br />Now meet <span className="og-highlight">the grounds.</span></h2></div>
         <div className="og-intro-copy"><p className="og-lead">Great venues bring people together.<br />Their economic opportunity can, too.</p><p>Venue owners keep their land and run their business. Grounds, our special-purpose vehicle (SPV), acquires a share of the distributable net profit. Open Grounds makes those rights accessible as tokens, with rules you can inspect.</p><a className="og-text-link" href="#how-it-works">See how everyone connects <ArrowRight size={18} aria-hidden /></a></div>
+        <figure className="og-intro-photo">
+          <Image src="/landing-player.jpg" alt="A tennis player serving on a sunlit clay court" fill sizes="(max-width: 1400px) 94vw, 1320px" />
+          <div className="og-photo-note"><span className="og-photo-note-dot" aria-hidden /><span>Places for people.<br /><strong>Possibilities beyond play.</strong></span></div>
+          <figcaption>Illustrative photography · not a listed venue</figcaption>
+        </figure>
       </section>
 
       <section className="og-gallery-section" aria-labelledby="gallery-title">
