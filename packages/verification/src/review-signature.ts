@@ -30,10 +30,10 @@ export function reviewApprovalData(approval: ReviewApproval, chainId: number, re
 }
 
 export async function verifyReviewApproval(approval: ReviewApproval, signature: Hex, signer: Address, chainId: number, registry: Address, now = Math.floor(Date.now() / 1000)) {
-  if (approval.deadline <= BigInt(now) || approval.deadline > BigInt(now + REVIEW_SIGNATURE_TTL)) throw new Error("Tanda tangan review kedaluwarsa. Klik Setujui & tanda tangani lagi.");
-  if (approval.assetValueIdr <= 0n) throw new Error("Nilai aset final harus positif");
-  if (approval.reviewerWallet.toLowerCase() !== signer.toLowerCase()) throw new Error("Wallet penanda tangan tidak cocok dengan wallet dalam pesan review");
-  if (!await verifyTypedData({ ...reviewApprovalData(approval, chainId, registry), address: signer, signature })) throw new Error("Tanda tangan tidak cocok dengan wallet reviewer atau data pengajuan sudah berubah. Tinjau ulang lalu tanda tangani lagi.");
+  if (approval.deadline <= BigInt(now) || approval.deadline > BigInt(now + REVIEW_SIGNATURE_TTL)) throw new Error("Review signature expired. Click Approve & sign again.");
+  if (approval.assetValueIdr <= 0n) throw new Error("Final asset value must be positive.");
+  if (approval.reviewerWallet.toLowerCase() !== signer.toLowerCase()) throw new Error("Signing wallet does not match the wallet in the review approval.");
+  if (!await verifyTypedData({ ...reviewApprovalData(approval, chainId, registry), address: signer, signature })) throw new Error("Signature does not match the reviewer wallet or the application data has changed. Review the application and sign again.");
 }
 
 export interface ReviewVote {

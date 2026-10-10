@@ -1,7 +1,7 @@
 import { Badge, Card, KV } from "@venue-rwa/ui";
 import { evidenceCoverage, EXTRACTABLE, type EvidenceDocument } from "@venue-rwa/verification";
 
-const DOC_LABEL: Record<string, string> = { deed: "Akta", nib: "NIB", npwp: "NPWP", land_certificate: "Sertifikat tanah", bank_statement: "Rekening koran" };
+const DOC_LABEL: Record<string, string> = { deed: "Company deed", nib: "Business ID · NIB", npwp: "Tax ID · NPWP", land_certificate: "Land certificate", bank_statement: "Bank statement" };
 interface ReviewFinding { severity: string; finding_text: string; disposition?: string | null }
 
 export function ReviewSummary({ docs, findings, checkedAt, model, running }: {
@@ -15,24 +15,24 @@ export function ReviewSummary({ docs, findings, checkedAt, model, running }: {
   const pending = urgent.filter((f) => !f.disposition).length;
   const warnings = findings.filter((f) => f.severity === "medium" || f.severity === "low");
   const checked = !!checkedAt;
-  const title = running ? "Pemeriksaan sedang berjalan" : !checked ? "Bukti belum diperiksa" : urgent.length ? "Ada temuan penting untuk ditinjau" : failed || coverage.score < 100 ? "Bukti masih perlu dilengkapi atau diperiksa manual" : "Bukti tersedia untuk keputusan reviewer";
+  const title = running ? "Document check in progress" : !checked ? "Evidence not checked" : urgent.length ? "Priority findings need review" : failed || coverage.score < 100 ? "Evidence needs completion or manual review" : "Evidence is ready for review";
   return (
-    <Card title="Ringkasan verifikasi" subtitle="Baca kesimpulan awal dan cakupan bukti sebelum meninjau tiap temuan." className="mt">
+    <Card title="Evidence overview" subtitle="Check evidence coverage before reviewing individual findings." className="mt">
       <div className="grid c2">
         <div>
           <h3 style={{ marginTop: 0 }}>{title}</h3>
-          <p>{!checked ? "Jalankan pemeriksaan untuk membaca dokumen dan membandingkannya dengan pengajuan. Belum ada hasil risiko yang dapat disimpulkan." : `${pending} temuan penting belum ditinjau. Ada ${warnings.length} hal lain yang perlu diperhatikan dan ${failed} dokumen yang perlu dibaca manual.`}</p>
+          <p>{!checked ? "Run the check to extract and compare document evidence. No risk conclusions are available yet." : `${pending} priority findings need review. ${warnings.length} other items need attention; ${failed} documents need a manual check.`}</p>
           {checked && <ul className="small" style={{ paddingLeft: 18 }}>{[...urgent, ...warnings].slice(0, 3).map((f, i) => <li key={i} style={{ marginBottom: 8 }}>{f.finding_text}</li>)}</ul>}
-          {checked && urgent.length === 0 && warnings.length === 0 && <p className="small muted">Pemeriksaan yang berjalan belum menemukan ketidaksesuaian. Ini tidak membuktikan keaslian dokumen atau ketiadaan risiko.</p>}
-          <details className="disclose"><summary>Status pembacaan dokumen</summary><div className="body"><KV rows={[["Ekstraksi AI", running ? "Sedang membaca dokumen" : !checked ? "Belum ada hasil pemeriksaan" : `${successful} dari ${extractable.length} dokumen terbaca (termasuk hasil parsial)`], ["Model ekstraksi", checked ? model ?? "LLM belum dikonfigurasi pada pemeriksaan terakhir" : "Belum tercatat"], ["Pemeriksaan terakhir", checkedAt ? new Date(checkedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) + " WIB" : "Belum dijalankan"]]} />
-          <p className="small muted">AI membaca isi dokumen. Pencocokan data dan ringkasan dihitung dengan aturan tetap; keputusan tetap di Anda.</p></div></details>
+          {checked && urgent.length === 0 && warnings.length === 0 && <p className="small muted">No discrepancies were detected. This does not establish document authenticity or absence of risk.</p>}
+          <details className="disclose"><summary>Document extraction status</summary><div className="body"><KV rows={[["AI extraction", running ? "Reading documents" : !checked ? "No check results" : `${successful} of ${extractable.length} documents read, including partial results`], ["Extraction model", checked ? model ?? "LLM not configured for the last check" : "Not recorded"], ["Last checked", checkedAt ? new Date(checkedAt).toLocaleString("en-GB", { timeZone: "Asia/Jakarta" }) + " WIB" : "Not run"]]} />
+          <p className="small muted">AI reads document text. Cross-checks and summaries use deterministic rules; people make every decision.</p></div></details>
         </div>
         <div>
-          <div className="row" style={{ justifyContent: "space-between" }}><b>Kelengkapan bukti terbaca</b><Badge tone="info">{checked && !running ? `${coverage.score}/100` : "Belum final"}</Badge></div>
-          <progress value={coverage.score} max={100} aria-label="Kelengkapan bukti terbaca" style={{ width: "100%", height: 12, accentColor: "#c25a00", margin: "12px 0" }} />
-          <p className="small muted">Angka ini menunjukkan seberapa banyak data wajib yang berhasil dibaca dan didukung kutipan. Ini bukan nilai kelayakan investasi.</p>
-          <details className="disclose"><summary>Kenapa nilainya segitu?</summary><div className="body"><p>Setiap dokumen wajib bernilai maksimal 20 poin [Asumsi UI]. Poin diberikan sesuai jumlah data yang punya kutipan terverifikasi. Data kosong atau gagal dibaca mendapat 0 poin.</p><KV rows={coverage.rows.map((r) => [DOC_LABEL[r.kind] ?? r.kind, !r.present ? "Belum diunggah · 0/20" : `${r.verified}/${r.total} data berbukti · ${(20 * r.verified / r.total).toFixed(1)}/20`])} />
-          </div></details><p className="small muted" style={{ marginTop: 12 }}>Nilai 100 berarti semua data wajib punya kutipan, bukan berarti venue bebas risiko. Temuan penting tetap harus ditinjau.</p>
+          <div className="row" style={{ justifyContent: "space-between" }}><b>Readable evidence coverage</b><Badge tone="info">{checked && !running ? `${coverage.score}/100` : "Pending"}</Badge></div>
+          <progress value={coverage.score} max={100} aria-label="Readable evidence coverage" style={{ width: "100%", height: 12, accentColor: "#c25a00", margin: "12px 0" }} />
+          <p className="small muted">Shows how much required information was read and supported by citations. It is not an investment rating.</p>
+          <details className="disclose"><summary>How is this score calculated?</summary><div className="body"><p>Each required document contributes up to 20 points [UI assumption], based on verified citations. Missing or unreadable information receives 0 points.</p><KV rows={coverage.rows.map((r) => [DOC_LABEL[r.kind] ?? r.kind, !r.present ? "Not uploaded · 0/20" : `${r.verified}/${r.total} fields cited · ${(20 * r.verified / r.total).toFixed(1)}/20`])} />
+          </div></details><p className="small muted" style={{ marginTop: 12 }}>A score of 100 means required fields have citations. It does not mean the venue is risk-free. Priority findings still need review.</p>
         </div>
       </div>
     </Card>

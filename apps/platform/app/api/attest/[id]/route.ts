@@ -8,17 +8,17 @@ import { ownerOfVenue } from "@/lib/flows/onboarding";
 import { signPeriod } from "@/lib/flows/periods";
 import { ownerSignAcquisition } from "@/lib/flows/series";
 
-/** Siapa boleh membuka/menandatangani attestation ini: owner venue seri itu (COUNTERPARTY) atau reviewer independen (VERIFIER). Kontrak tetap memeriksa ulang. */
+/** Allow only the series owner or an independent reviewer to open/sign an attestation. */
 async function load(id: string, me: Me | null) {
-  if (!me) throw new Error("Silakan masuk dulu");
+  if (!me) throw new Error("Sign in to continue.");
   const { data: att } = await platformDb().from("attestations").select("*").eq("id", id).maybeSingle();
-  if (!att) throw new Error("Attestation tidak ditemukan");
+  if (!att) throw new Error("Attestation not found.");
   const ctx = await getSeries(att.series_id);
   const isOwner = me.role === "owner" && (await ownerOfVenue(ctx.venue.id)) === me.userId;
   const isReviewer = me.role === "reviewer";
-  if (!isOwner && !isReviewer) throw new Error("Anda bukan penanda tangan attestation ini");
-  if (isOwner && att.kind === "VALUATION_UPDATE") throw new Error("Revaluasi ditandatangani platform dan verifier, bukan owner");
-  if (isReviewer && att.kind === "ACQUISITION_CLOSED") throw new Error("Akuisisi ditandatangani platform dan owner");
+  if (!isOwner && !isReviewer) throw new Error("Your account is not a signer for this attestation.");
+  if (isOwner && att.kind === "VALUATION_UPDATE") throw new Error("Revaluations are signed by the platform and verifier, not the owner.");
+  if (isReviewer && att.kind === "ACQUISITION_CLOSED") throw new Error("Acquisitions are signed by the platform and owner.");
   return { att, ctx, isOwner };
 }
 

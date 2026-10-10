@@ -48,7 +48,7 @@ export async function runAutomatedCheck(caseId: string, opts: { assetValue?: num
   const todo = docs.filter((d) => EXTRACTABLE.includes(d.kind as DocKind));
   for (const d of todo) {
     let ex: Extraction;
-    if (!cfg) ex = { kind: d.kind, status: "failed", fields: {}, pages: 0, note: "LLM_API_KEY belum diisi: ekstraksi tidak berjalan" };
+    if (!cfg) ex = { kind: d.kind, status: "failed", fields: {}, pages: 0, note: "LLM_API_KEY is not configured; document extraction was skipped." };
     else {
       try { ex = await extractDocument(d.kind as DocKind, await pagesOf(d.storage_path, String(d.original_name ?? "")), chatFn(cfg)); }
       catch (e: any) { ex = { kind: d.kind, status: "failed", fields: {}, pages: 0, note: String(e?.message ?? e) }; }

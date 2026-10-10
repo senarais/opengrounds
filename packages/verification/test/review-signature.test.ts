@@ -24,7 +24,7 @@ describe("signed review approval", () => {
   });
   it("rejects expired statements", async () => {
     const signature = await signer.signTypedData(reviewApprovalData(approval, 11155111, registry));
-    await expect(verifyReviewApproval(approval, signature, signer.address, 11155111, registry, 1600)).rejects.toThrow("kedaluwarsa");
+    await expect(verifyReviewApproval(approval, signature, signer.address, 11155111, registry, 1600)).rejects.toThrow("expired");
   });
 });
 

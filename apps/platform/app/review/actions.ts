@@ -17,7 +17,7 @@ export async function checkAction(fd: FormData) {
   await guarded(`/review/${id}`, async () => {
     const v = fd.get("assetValue") ? Math.floor(Number(fd.get("assetValue"))) : undefined;
     const r = await runAutomatedCheck(id, { assetValue: v });
-    return `Pemeriksaan selesai. ${r.summary.counts.critical + r.summary.counts.high} temuan penting dan ${r.summary.counts.medium} hal perlu perhatian. Baca ringkasan dan tinjau bukti sebelum memutuskan.`;
+    return `Check complete. ${r.summary.counts.critical + r.summary.counts.high} priority findings and ${r.summary.counts.medium} other items need attention. Review the evidence before deciding.`;
   });
 }
 export async function disposeAction(fd: FormData) {
@@ -35,9 +35,9 @@ export async function decideAction(fd: FormData) {
     const result = await decideCase(id, me.email, decision, String(fd.get("note") ?? ""), decision === "APPROVED" ? {
       me, assetValue, proof: { signature: String(fd.get("reviewSignature") ?? "") as Hex, deadline: String(fd.get("reviewDeadline") ?? ""), wallet: String(fd.get("reviewWallet") ?? "") },
     } : undefined);
-    if (decision !== "APPROVED") return decision === "REJECTED" ? "Pengajuan ditolak." : "Owner diminta melengkapi data.";
-    if (!result.finalized) return `Persetujuan Anda tersimpan (1 dari 2). Menunggu tanda tangan ${result.waitingFor}; kontrak belum dibuat.`;
+    if (decision !== "APPROVED") return decision === "REJECTED" ? "Application declined." : "More information requested from the owner.";
+    if (!result.finalized) return `Your approval is saved (1 of 2). Awaiting ${result.waitingFor}; the contract is not deployed yet.`;
     const r = await issueSeries(result.venueId, me.email, assetValue);
-    return `Dua persetujuan lengkap. Kontrak seri otomatis dibuat (${r.address.slice(0, 10)}…). Tanda tangan platform disiapkan otomatis; menunggu tanda tangan akuisisi owner.`;
+    return `Both approvals are complete. Series contract deployed (${r.address.slice(0, 10)}…). The platform signature is ready; awaiting the owner’s acquisition signature.`;
   });
 }
