@@ -62,6 +62,8 @@ Opsional di `.env` (kosong = jalur simulasi berlabel): `PSP_MODE=xendit` + `XEND
 
 Dibuat selama periode hackathon: seluruh `packages/contracts`, `apps/platform`, `packages/shared`, `packages/verification`, `db/`, dan README ini (riwayat commit di repo). **Kode atau infrastruktur yang sudah ada sebelumnya** dan dipakai ulang: PoS (`apps/pos`) dan `packages/connectors`/`packages/ui` dari iterasi awal proyek ini (dibuat di dalam repo ini sebelum pivot ke PRD v4.1; tidak ada kode dari proyek Arbitrum lama). Pustaka dan layanan pihak ketiga: OpenZeppelin Contracts v5, forge-std, viem, Next.js, React, Supabase, Privy, Xendit (mode uji), Didit, Morphic (gateway LLM), unpdf, tesseract.js, three.js / react-three-fiber, zod.
 
+Landing Platform berbahasa Inggris memakai Lucide icons, galeri melengkung dari brief pengguna, serta referensi desain Rana Grounds dan Alsager Padel. Analisis desain, aksesibilitas, dan atribusi foto: [`apps/platform/LANDING_DESIGN.md`](apps/platform/LANDING_DESIGN.md).
+
 ## Batas yang jujur
 
 Open Grounds tidak memiliki izin regulator; rupiah dan escrow disimulasikan; 2-dari-3 hanya mendemokan mekanisme bila kunci dipegang tim yang sama; nilai aset diinput reviewer (production: penilai independen); cek AHU/OSS belum terintegrasi; xenPlatform belum aktif sehingga split memakai sandbox; catatan on-chain bukan bukti kepemilikan hukum.
