@@ -7,11 +7,11 @@ export async function join(fd: FormData) {
   const pw = String(fd.get("password") ?? "");
   let err: string | null = null;
   try {
-    if (pw !== String(fd.get("confirm") ?? "")) throw new Error("Kata sandi dan pengulangannya tidak sama");
+    if (pw !== String(fd.get("confirm") ?? "")) throw new Error("Passwords do not match.");
     await acceptInvite(token, pw);
   } catch (e: any) {
     err = e?.message ?? String(e);
   }
   if (err) redirect(`/join/${token}?err=${encodeURIComponent(err)}`);
-  redirect(`/login?ok=${encodeURIComponent("Akun staf aktif. Silakan masuk dengan kata sandi yang baru Anda buat.")}`);
+  redirect(`/login?ok=${encodeURIComponent("Staff account activated. Log in with your new password.")}`);
 }

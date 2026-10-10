@@ -19,11 +19,11 @@ export async function signIn(fd: FormData) {
   const next = safeNext(String(fd.get("next") || "/"));
   const sb = await userClient();
   const { error } = await sb.auth.signInWithPassword({ email: String(fd.get("email")).trim(), password: String(fd.get("password")) });
-  if (error) redirect(`/login?err=${encodeURIComponent("Email atau kata sandi salah")}&next=${encodeURIComponent(next)}`);
+  if (error) redirect(`/login?err=${encodeURIComponent("Email or password is incorrect.")}&next=${encodeURIComponent(next)}`);
   const me = await getMe();
   if (!me) {
     await sb.auth.signOut();
-    redirect(`/login?err=${encodeURIComponent("Akun ini belum terdaftar di platform. Daftar sebagai owner dulu.")}`);
+    redirect(`/login?err=${encodeURIComponent("This account is not registered on Open Grounds. Create an owner account first.")}`);
   }
   redirect(next === "/" ? homeFor(me!.role) : next);
 }
