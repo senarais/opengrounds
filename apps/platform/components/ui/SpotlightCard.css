@@ -1,0 +1,12 @@
+.spotlight-card { position: relative; isolation: isolate; overflow: hidden; padding: 2rem; border-radius: 1.5rem; background-color: var(--spotlight-card-surface); box-shadow: var(--spotlight-card-shadow); }
+.spotlight-card__light, .spotlight-card__grain, .spotlight-card__border, .spotlight-card__edge { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.spotlight-card__light, .spotlight-card__grain { z-index: -1; opacity: 0; }
+.spotlight-card__grain { background-size: 160px 160px; mix-blend-mode: overlay; }
+.spotlight-card__border, .spotlight-card__edge { z-index: 1; padding: 1px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.spotlight-card__border { background: var(--spotlight-card-border); }
+.spotlight-card__edge { opacity: 0; }
+
+.og-interior-spotlight { --spotlight-card-surface: #fff !important; --spotlight-card-border: #dedad3 !important; --spotlight-card-shadow: 0 2px 4px #17171704, 0 14px 32px -24px #17171723 !important; padding: 24px !important; border-radius: 10px !important; }
+.og-interior-spotlight h2 { position: relative; z-index: 2; }
+.og-interior-spotlight > :not(.spotlight-card__light):not(.spotlight-card__grain):not(.spotlight-card__border):not(.spotlight-card__edge) { position: relative; z-index: 2; }
+@media (max-width: 600px) { .og-interior-spotlight { padding: 18px !important; } }

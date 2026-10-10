@@ -27,11 +27,16 @@ two-column process (one below 540px), full-width photography, native FAQ disclos
   scroll-triggered text/section transitions; CSS button transitions are 300ms.
   Adaptation: editorial hierarchy, tilted headline highlight, airy two-column
   stories and restrained hover/reveal motion, using Open Grounds colors.
+- [React Bits SpotlightCard](https://reactbits.dev/components/spotlight-card) was
+  pulled from its TypeScript/CSS registry. The actual pointer/focus spotlight and
+  grain card is used on forms and selected information cards; light paper/orange
+  defaults replace the source's dark demo palette. Its `MIT + Commons Clause`
+  notice is included at `apps/platform/components/ui/REACT_BITS_NOTICE.md`.
 - [React Bits AnimatedContent](https://reactbits.dev/animations/animated-content)
   was inspected alongside its TypeScript source. Its GSAP/ScrollTrigger dependency
   is unnecessary for these one-time entrances: IntersectionObserver + CSS handles
-  them. No React Bits source is included: the supplied canvas and sliced-cylinder
-  components cover the requested motion without GSAP or an extra animation runtime.
+  them. The supplied canvas and sliced-cylinder components cover the rest without
+  an extra animation runtime.
 
 ## Hero revision
 
@@ -120,6 +125,12 @@ viewport pausing, explicit pause state, and an empty-image guard.
 Landing shell is selected by pathname, leaving existing route layouts available.
 Styles use `og-` and `tgh-` prefixes. Existing Privy context and role-based
 dashboard access remain in the shared layout.
+
+Interior pages use `apps/platform/app/interior.css`, English role-aware navigation,
+shared form controls, and existing semantic page primitives. The owner submission
+form follows the supplied multi-step reference: vertical progress on desktop,
+compact progress on smaller viewports, sticky field state across steps, and native
+validation scoped to the current step.
 
 ## Image sources
 

@@ -64,6 +64,8 @@ Dibuat selama periode hackathon: seluruh `packages/contracts`, `apps/platform`, 
 
 Landing Platform berbahasa Inggris memakai Lucide icons, galeri melengkung dari brief pengguna, serta referensi desain Rana Grounds dan Alsager Padel. Analisis desain, aksesibilitas, dan atribusi foto: [`apps/platform/LANDING_DESIGN.md`](apps/platform/LANDING_DESIGN.md).
 
+Halaman interior Platform dirombak bertahap ke bahasa Inggris dan design system landing. Komponen `SpotlightCard` React Bits dipakai untuk form dan kartu data; atribusi + lisensi tersimpan di `apps/platform/components/ui/REACT_BITS_NOTICE.md`.
+
 ## Batas yang jujur
 
 Open Grounds tidak memiliki izin regulator; rupiah dan escrow disimulasikan; 2-dari-3 hanya mendemokan mekanisme bila kunci dipegang tim yang sama; nilai aset diinput reviewer (production: penilai independen); cek AHU/OSS belum terintegrasi; xenPlatform belum aktif sehingga split memakai sandbox; catatan on-chain bukan bukti kepemilikan hukum.
