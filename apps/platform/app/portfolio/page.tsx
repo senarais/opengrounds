@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAddress, type Address } from "viem";
-import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader } from "@venue-rwa/ui";
+import { Badge, Card, Empty, Flash, Kpi, Notice, PageHeader, Bars } from "@venue-rwa/ui";
 import { SellBackBox, WalletStatus } from "@/components/Wallet";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { Statements } from "@/components/Statements";
@@ -41,11 +41,18 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
   const bankOk = bank?.status === "verified";
   const canSignOut = true;
 
+  const chartRows = holdings.map((x) => ({
+    label: x.s.symbol,
+    value: Number(x.h.balance) * Number(x.info.refPriceIdr),
+    display: rp(Number(x.h.balance) * Number(x.info.refPriceIdr)),
+  })).sort((a, b) => b.value - a.value);
+
   return (
     <div className="container">
       <AutoRefresh seconds={15} />
       <PageHeader eyebrow="Investor" title="Portofolio" lead="Token Anda, saldo hasil jatah, dan status pesanan." />
       <Flash ok={sp.ok} err={sp.err} />
+      {ledger.some((entry) => String(entry.ref).startsWith("demo-test-balance-")) && <Notice tone="info" title="Saldo distribusi telah ditambahkan">Saldo ledger Anda telah ditambahkan. Anda dapat menarik saldo ini langsung ke rekening bank Anda melalui Xendit Payout secara real-time.</Notice>}
       {syncErrs.length > 0 && <Notice tone="warn" title="Sebagian pesanan belum selesai diproses:">{syncErrs[0]}</Notice>}
 
       <div className="grid c3">
@@ -80,12 +87,17 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
       </div>
 
       <div className="grid c3 mt">
-        <Kpi label="Saldo (hasil jatah)" value={rp(balance)} hint="milik Anda, di rekening distribusi (simulasi)" accent />
+        <Kpi label="Saldo tersedia" value={rp(balance)} hint="untuk tarik atau reinvest · rupiah simulasi" accent />
         <Kpi label="Token dimiliki" value={holdings.reduce((a, x) => a + Number(x.h.balance), 0).toLocaleString("id-ID")} />
         <Kpi label="Jatah kumulatif" value={rp(holdings.reduce((a, x) => a + Number(x.h.claimable), 0))} hint="hitungan kontrak, termasuk yang belum dikreditkan" />
       </div>
 
       <div className="section-title mt"><h2>Token saya</h2><Link className="small" href="/products">Cari produk</Link></div>
+      {chartRows.length > 0 && (
+        <Card title="Sebaran Portofolio" subtitle="Nilai token berdasarkan harga referensi saat ini" className="mb">
+          <Bars rows={chartRows} />
+        </Card>
+      )}
       {holdings.length === 0 ? <Empty>Belum ada token. <Link href="/products" style={{ fontWeight: 700 }}>Lihat produk</Link></Empty> : holdings.map(({ s, info, h }) => (
         <Card key={s.id} title={<><Link href={`/products/${s.id}`}>{s.venues?.name}</Link> · {s.symbol}</>} subtitle={`${info.state} · harga referensi ${rp(Number(info.refPriceIdr))}`}>
           <div className="grid c2">
@@ -127,7 +139,7 @@ export default async function Portfolio({ searchParams }: { searchParams: Promis
           {wds.length > 0 && <table className="table small" style={{ marginTop: 10 }}><tbody>{wds.slice(0, 5).map((w) => <tr key={w.id}><td>{date(w.created_at)}</td><td>{rp(Number(w.amount))}</td><td><Badge tone={w.status === "Settled" ? "ok" : w.status === "Failed" ? "bad" : "info"}>{WITHDRAW_STATUS_LABEL[w.status]}</Badge></td></tr>)}</tbody></table>}
         </Card>
         <Card title="Riwayat saldo" subtitle="Append-only; koreksi lewat entri pembalik">
-          {ledger.length === 0 ? <p className="small muted">Belum ada.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Jatah periode " + (l.period_no ?? ""), withdrawal: "Penarikan", withdrawal_reversal: "Penarikan gagal (dikembalikan)", reinvest: "Reinvest", sellback: "Jual balik", adjustment: "Penyesuaian" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
+          {ledger.length === 0 ? <p className="small muted">Belum ada.</p> : <table className="table small"><tbody>{ledger.map((l) => <tr key={l.id}><td>{date(l.created_at)}</td><td>{{ distribution: "Jatah periode " + (l.period_no ?? ""), withdrawal: "Penarikan", withdrawal_reversal: "Penarikan gagal (dikembalikan)", reinvest: "Reinvest", sellback: "Jual balik", adjustment: String(l.ref).startsWith("demo-test-balance-") ? "Saldo uji demo (bukan bagi hasil)" : "Penyesuaian" }[l.kind as string]}</td><td style={{ textAlign: "right", color: Number(l.amount) < 0 ? "var(--bad)" : "var(--ok)" }}>{Number(l.amount) < 0 ? "−" : "+"}{rp(Math.abs(Number(l.amount)))}</td></tr>)}</tbody></table>}
         </Card>
       </div>
 

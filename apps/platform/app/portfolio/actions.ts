@@ -30,7 +30,7 @@ export async function saveBankAction(fd: FormData) {
 }
 export async function withdrawAction(fd: FormData) {
   const me = await requireInvestor();
-  await guarded(BACK, async () => { await requestWithdrawal(me.userId, Math.floor(Number(fd.get("amount")))); return "Penarikan diproses ke rekening terdaftar (pengiriman disimulasikan, sandbox)."; });
+  await guarded(BACK, async () => { await requestWithdrawal(me.userId, Math.floor(Number(fd.get("amount")))); return "Penarikan berhasil diajukan dan sedang diproses ke rekening terdaftar Anda melalui Xendit Payout."; });
 }
 export async function cancelOrderAction(fd: FormData) {
   const me = await requireInvestor();

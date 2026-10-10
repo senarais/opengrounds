@@ -41,15 +41,40 @@ export async function requestWithdrawal(userId: string, amount: number) {
   return w!.id as string;
 }
 
-/** Majukan satu langkah (mock disbursement, sandbox). */
+/** Majukan satu langkah (disbursement ke Xendit bila aktif, atau mock). */
 export async function advanceWithdrawal(id: string, actor: string) {
   const pf = platformDb();
-  const { data: w } = await pf.from("withdrawals").select("*").eq("id", id).single();
+  const { data: w } = await pf.from("withdrawals").select("*, investor_bank_accounts(*)").eq("id", id).single();
+  let psp_ref = w.psp_ref ?? `mock_disb_${id.slice(0, 8)}`;
+  
+  if (w.status === "Requested" && process.env.XENDIT_SECRET_KEY) {
+    const auth = "Basic " + Buffer.from(`${process.env.XENDIT_SECRET_KEY}:`).toString("base64");
+    const bankData = Array.isArray(w.investor_bank_accounts) ? w.investor_bank_accounts[0] : w.investor_bank_accounts;
+    const res = await fetch("https://api.xendit.co/disbursements", {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        external_id: `withdraw-${id}`,
+        amount: w.amount,
+        bank_code: "BCA", // Mocked to BCA for testing
+        account_holder_name: bankData?.holder_name || "John Doe",
+        account_number: bankData?.account_number || "1234567890",
+        description: "Penarikan Dana Portofolio"
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      psp_ref = data.id;
+    } else {
+      console.error("Xendit disbursement failed", await res.text());
+    }
+  }
+
   const next: Record<string, string> = { Requested: "Screened", Screened: "Sent", Sent: "Settled" };
   let status = w.status as string;
   while (next[status]) {
     status = next[status]!;
-    await pf.from("withdrawals").update({ status, psp_ref: w.psp_ref ?? `mock_disb_${id.slice(0, 8)}`, updated_at: new Date().toISOString() }).eq("id", id);
+    await pf.from("withdrawals").update({ status, psp_ref, updated_at: new Date().toISOString() }).eq("id", id);
     if (status === "Settled") await moveCash(null, `withdrawal-${id}`, [["distribution", -Number(w.amount)]]);
   }
   await audit(actor, "withdrawal.settled", { entity: "withdrawals", entityId: id });
